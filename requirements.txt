@@ -1,0 +1,12 @@
+requests==2.31.0
+beautifulsoup4==4.12.2
+arxiv==1.4.8
+openai==1.12.0
+python-dotenv==1.0.0
+newsapi-python==0.2.7
+langchain==0.0.314
+markdownify==0.11.6
+pandas==2.1.0
+tqdm==4.66.1
+feedparser==6.0.10
+python-dateutil==2.8.2 
