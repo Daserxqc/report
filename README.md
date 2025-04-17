@@ -54,6 +54,19 @@ python generate_research_report.py --topic "人工智能" --subtopics "机器学
 python generate_insights_report.py --topic "人工智能" --subtopics "机器学习" "深度学习"
 ```
 
+### 评估报告质量
+
+```bash
+python evaluate_report.py --report "reports/AI行业动态报告.md" --type news --topic "人工智能"
+```
+
+参数说明：
+- `--report`, `-r`: 报告文件路径
+- `--type`, `-t`: 报告类型 (news:新闻报告, insights:洞察报告, research:研究报告)
+- `--topic`, `-p`: 报告主题，如不提供则尝试从文件名猜测
+
+评估工具会对报告进行全面分析，评估相关性、全面性、时效性、深度、结构性等维度，并给出总体评价和改进建议。评估结果将同时显示在控制台并保存为文本文件。
+
 ## 参数说明
 
 - `--topic`: 报告的主题，如"人工智能"、"区块链"等（必需）
@@ -109,5 +122,9 @@ python generate_all_reports.py -i
 - 生成完整报告可能需要较长时间，取决于搜索内容的多少和API响应速度
 - API使用可能会产生费用，请注意控制使用频率
 - 如遇到API限制，系统会尝试使用替代方法生成内容
+- 确保所有API密钥都已正确配置
+- 报告生成需要网络连接
+- 报告生成过程可能受API限制影响
+- 生成复杂的研究报告可能需要较长时间
 
 希望这个工具能帮助您更高效地了解行业趋势和动态！ 

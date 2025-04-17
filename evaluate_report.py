@@ -1,0 +1,103 @@
+#!/usr/bin/env python
+# -*- coding: utf-8 -*-
+
+"""
+报告评估工具 - 用于评估已生成的行业报告质量
+使用方法: python evaluate_report.py --report 报告文件路径 --type 报告类型 --topic 报告主题
+"""
+
+import os
+import argparse
+from pathlib import Path
+from report_utils import ReportEvaluator
+
+def main():
+    # 创建参数解析器
+    parser = argparse.ArgumentParser(description='行业报告质量评估工具')
+    parser.add_argument('--report', '-r', type=str, required=True, help='报告文件路径')
+    parser.add_argument('--type', '-t', type=str, default='news', choices=['news', 'insights', 'research'], 
+                        help='报告类型 (news:新闻报告, insights:洞察报告, research:研究报告)')
+    parser.add_argument('--topic', '-p', type=str, 
+                        help='报告主题，如不提供则尝试从文件名猜测')
+    
+    # 解析参数
+    args = parser.parse_args()
+    report_path = args.report
+    report_type = args.type
+    report_topic = args.topic
+    
+    # 检查报告文件是否存在
+    if not os.path.exists(report_path):
+        print(f"错误: 报告文件 '{report_path}' 不存在")
+        return
+    
+    # 如果没有提供主题，尝试从文件名猜测
+    if not report_topic:
+        filename = Path(report_path).stem
+        if "行业" in filename:
+            report_topic = filename.split("行业")[0]
+            print(f"从文件名猜测报告主题: {report_topic}")
+        else:
+            report_topic = filename.split("_")[0]
+            print(f"从文件名猜测报告主题: {report_topic}")
+    
+    # 读取报告内容
+    try:
+        with open(report_path, "r", encoding="utf-8-sig") as f:
+            report_content = f.read()
+    except UnicodeDecodeError:
+        try:
+            # 尝试使用不同的编码
+            with open(report_path, "r", encoding="gbk") as f:
+                report_content = f.read()
+        except:
+            print(f"错误: 无法读取报告文件，请检查文件编码")
+            return
+    
+    print(f"正在评估报告: {report_path}")
+    print(f"报告类型: {report_type}")
+    print(f"报告主题: {report_topic}")
+    print(f"报告长度: {len(report_content)} 字符")
+    print("正在进行评估，这可能需要一些时间...")
+    
+    # 创建评估器并评估报告
+    evaluator = ReportEvaluator()
+    evaluation = evaluator.evaluate_report(
+        report_content=report_content,
+        report_type=report_type,
+        topic=report_topic
+    )
+    
+    # 打印评估结果
+    print("\n" + "="*50)
+    print(f"报告 '{Path(report_path).name}' 评估结果")
+    print("="*50)
+    
+    print(f"总体评分: {evaluation['overall_score']}/10")
+    
+    print("\n各维度评分:")
+    for dimension, data in evaluation['scores'].items():
+        print(f"- {dimension}: {data['score']}/10 - {data['reason']}")
+    
+    print(f"\n总体评价: \n{evaluation['evaluation']}")
+    
+    print(f"\n改进建议: \n{evaluation['suggestions']}")
+    
+    # 将评估结果保存到文件
+    output_path = Path(report_path).with_suffix('.evaluation.txt')
+    with open(output_path, "w", encoding="utf-8-sig") as f:
+        f.write(f"报告 '{Path(report_path).name}' 评估结果\n")
+        f.write("="*50 + "\n")
+        f.write(f"总体评分: {evaluation['overall_score']}/10\n\n")
+        
+        f.write("各维度评分:\n")
+        for dimension, data in evaluation['scores'].items():
+            f.write(f"- {dimension}: {data['score']}/10 - {data['reason']}\n")
+        
+        f.write(f"\n总体评价: \n{evaluation['evaluation']}\n")
+        f.write(f"\n改进建议: \n{evaluation['suggestions']}\n")
+    
+    print(f"\n评估结果已保存至: {output_path}")
+
+if __name__ == "__main__":
+    main() 

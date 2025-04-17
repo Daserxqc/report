@@ -3,8 +3,6 @@ import json
 import argparse
 from datetime import datetime
 from dotenv import load_dotenv
-import logging
-import re
 
 from collectors.tavily_collector import TavilyCollector
 from generators.report_generator import ReportGenerator
@@ -12,147 +10,129 @@ import config
 
 def get_industry_news_comprehensive(topic, days=7, companies=None):
     """
-    全面获取行业最新动态，包括突发新闻、创新动态、趋势和政策等
+    获取全面的行业动态信息
     
     Args:
         topic (str): 行业主题
-        days (int): 时间范围（天数）
-        companies (list): 重点公司列表（可选）
+        days (int): 天数范围
+        companies (list): 公司列表，可选
         
     Returns:
-        dict: 包含各类型新闻和报告内容的字典
+        dict: 包含行业动态数据和报告内容的字典
     """
-    logging.info(f"开始收集 {topic} 行业最新动态...")
+    print(f"\n=== 开始收集{topic}行业全面动态 ===")
     
-    # 初始化收集器和处理器
+    # 初始化数据收集器和LLM处理器
     tavily_collector = TavilyCollector()
-    llm_processor = tavily_collector._get_llm_processor() or None
+    llm_processor = tavily_collector._get_llm_processor()
     
-    # 使用直接搜索行业新闻的方法
-    try:
-        logging.info("使用直接行业新闻搜索方法...")
-        industry_news_result = tavily_collector.get_industry_news_direct(topic, days=days)
+    # 首先使用直接搜索获取行业新闻数据，不依赖于特定公司
+    # 这将提供更全面的行业视角，而不是仅关注大公司
+    all_news_data = tavily_collector.get_industry_news_direct(topic, days)
+    
+    # 如果提供了公司列表，收集这些公司的特定新闻作为补充
+    company_specifics = []
+    if companies and isinstance(companies, list):
+        print(f"\n=== 收集{len(companies)}家公司特定新闻作为补充 ===")
+        # 调整每家公司的新闻数量，确保不会过于偏重大公司
+        max_news_per_company = max(2, 10 // len(companies))
         
-        breaking_news = industry_news_result.get("breaking_news", [])
-        innovation_news = industry_news_result.get("innovation_news", [])
-        trend_news = industry_news_result.get("trend_news", [])
-        policy_news = industry_news_result.get("policy_news", [])
-        investment_news = industry_news_result.get("investment_news", [])
-        
-        logging.info(f"收集到 {len(breaking_news)} 条突发新闻，{len(innovation_news)} 条创新新闻，"
-                    f"{len(trend_news)} 条趋势新闻，{len(policy_news)} 条政策新闻，"
-                    f"{len(investment_news)} 条投资新闻")
-    except Exception as e:
-        logging.error(f"直接搜索行业新闻失败: {str(e)}")
-        breaking_news = []
-        innovation_news = []
-        trend_news = []
-        policy_news = []
-        investment_news = []
-
-    # 如果提供了公司列表，则获取特定公司的新闻
-    company_news_sections = []
-    if companies:
-        logging.info(f"开始获取 {len(companies)} 个特定公司的新闻...")
         for company in companies:
-            try:
-                company_news = tavily_collector.get_company_news(company, topic, days)
-                if company_news:
-                    logging.info(f"为 {company} 收集到 {len(company_news)} 条新闻")
-                    company_section = process_company_news(llm_processor, company, topic, company_news)
-                    company_news_sections.append(company_section)
-            except Exception as e:
-                logging.error(f"获取 {company} 公司新闻失败: {str(e)}")
+            company_news = tavily_collector.get_company_news(
+                company, topic, days, max_results=max_news_per_company
+            )
+            if company_news:
+                # 将公司新闻添加到公司特定部分
+                company_specifics.append({
+                    "company": company,
+                    "news": company_news
+                })
+                print(f"找到 {len(company_news)} 条 {company} 相关新闻")
+            else:
+                print(f"未找到 {company} 相关新闻")
+        
+        # 将公司特定新闻添加到总数据中
+        all_news_data["company_news"] = [item for company_data in company_specifics for item in company_data["news"]]
     
-    # 如果没有直接搜索到足够的行业新闻，尝试使用备用方法
-    if (len(breaking_news) + len(innovation_news) + len(trend_news) + 
-        len(policy_news) + len(investment_news)) < 5:
-        logging.warning("直接搜索未获取到足够的行业新闻，尝试使用备用方法...")
-        try:
-            # 这里可以保留原来的搜索方法作为备用
-            pass
-        except Exception as backup_e:
-            logging.error(f"备用搜索方法也失败: {str(backup_e)}")
-
-    # 生成报告内容
-    title = f"# {topic}行业最新动态报告\n\n"
-    date_info = f"报告生成日期: {datetime.now().strftime('%Y-%m-%d')}\n\n"
+    print(f"\n=== 收集完成，开始处理报告内容 ===")
     
-    # 处理各类新闻
-    breaking_news_section = process_breaking_news(llm_processor, topic, breaking_news)
-    innovation_news_section = process_innovation_news(llm_processor, topic, innovation_news)
-    investment_news_section = process_investment_news(llm_processor, topic, investment_news)
-    policy_news_section = process_policy_news(llm_processor, topic, policy_news)
+    # 初始化报告内容
+    content = f"# {topic}行业最新动态报告\n\n"
+    date_str = datetime.now().strftime('%Y-%m-%d')
+    content += f"报告日期: {date_str}\n\n"
     
-    # 如果直接收集到行业趋势新闻，使用它们生成趋势部分
-    all_news_data = {
-        "breaking_news": breaking_news,
-        "innovation_news": innovation_news,
-        "trend_news": trend_news,
-        "policy_news": policy_news,
-        "investment_news": investment_news
-    }
+    # 1. 首先处理重大新闻部分
+    breaking_news = all_news_data.get("breaking_news", [])
+    breaking_news_content = process_breaking_news(llm_processor, topic, breaking_news)
+    content += breaking_news_content
     
-    # 生成行业趋势总结
-    trend_summary_section = generate_comprehensive_trend_summary(
-        llm_processor, 
-        topic, 
-        all_news_data
-    )
+    # 2. 处理创新新闻部分
+    innovation_news = all_news_data.get("innovation_news", [])
+    innovation_news_content = process_innovation_news(llm_processor, topic, innovation_news)
+    content += innovation_news_content
     
-    # 添加公司部分（如果有）
-    companies_section = ""
-    if company_news_sections:
-        companies_section = "## 重点公司动态\n\n" + "\n\n".join(company_news_sections) + "\n\n"
+    # 3. 处理投资新闻部分
+    investment_news = all_news_data.get("investment_news", [])
+    investment_news_content = process_investment_news(llm_processor, topic, investment_news)
+    content += investment_news_content
     
-    # 组合所有部分
-    content_sections = [
-        title,
-        date_info,
-        breaking_news_section,
-        innovation_news_section,
-        investment_news_section,
-        policy_news_section,
-        companies_section if companies_section else "",
-        trend_summary_section,
-        "## 参考来源\n\n"
-    ]
+    # 4. 处理政策监管动态
+    policy_news = all_news_data.get("policy_news", [])
+    policy_content = process_policy_news(llm_processor, topic, policy_news)
+    content += policy_content
     
-    # 添加参考来源
-    all_news = (breaking_news + innovation_news + trend_news + 
-               policy_news + investment_news)
+    # 5. 处理行业趋势新闻
+    trend_news = all_news_data.get("trend_news", [])
+    trend_content = process_industry_trends(llm_processor, topic, trend_news)
+    content += trend_content
     
-    # 去重参考来源
-    reference_urls = {}
-    for item in all_news:
-        url = item.get('url')
-        if url and url not in reference_urls:
-            title = item.get('title', 'Unknown Title')
-            source = item.get('source', 'Unknown Source')
-            reference_urls[url] = f"- [{title}]({url}) - {source}"
+    # 6. 如果有公司特定新闻，生成公司动态部分
+    company_news = all_news_data.get("company_news", [])
+    if company_news and company_specifics:
+        content += "## 重点公司动态\n\n"
+        
+        # 为每个有新闻的公司生成小节
+        for company_data in company_specifics:
+            company = company_data["company"]
+            news_items = company_data["news"]
+            
+            if news_items:
+                company_summary = process_company_news(llm_processor, topic, company, news_items)
+                content += company_summary + "\n\n"
     
-    references = "\n".join(list(reference_urls.values()))
-    content_sections.append(references)
+    # 7. 最后生成趋势总结章节（对整个行业的分析）
+    trend_summary = generate_comprehensive_trend_summary(llm_processor, topic, all_news_data)
+    content += trend_summary
     
-    # 合并内容
-    content = "\n".join([section for section in content_sections if section])
+    # 8. 收集所有参考资料
+    references = []
     
+    for news_type in ["breaking_news", "innovation_news", "trend_news", "policy_news", "investment_news", "company_news"]:
+        for item in all_news_data.get(news_type, []):
+            title = item.get('title', '未知标题')
+            url = item.get('url', '#')
+            source = item.get('source', '未知来源')
+            if url != '#':
+                references.append(f"- [{title}]({url}) - {source}")
+    
+    # 去重参考资料
+    unique_references = list(set(references))
+    
+    # 添加参考资料章节
+    content += "\n\n## 参考资料\n\n"
+    content += "\n".join(unique_references)
+    
+    # 返回结果
     return {
         "content": content,
-        "breaking_news": breaking_news,
-        "innovation_news": innovation_news,
-        "trend_news": trend_news,
-        "policy_news": policy_news,
-        "investment_news": investment_news
+        "data": all_news_data,
+        "date": date_str
     }
 
 def process_breaking_news(llm_processor, topic, breaking_news):
     """处理行业重大新闻"""
     if not breaking_news:
         return f"## 行业重大事件\n\n目前暂无{topic}行业的重大新闻。\n\n"
-    
-    # 获取当前年份
-    current_year = datetime.now().year
     
     # 提取所有重大新闻的关键信息
     all_news_text = "\n\n".join([
@@ -170,24 +150,21 @@ def process_breaking_news(llm_processor, topic, breaking_news):
     2. 对这些事件可能对{topic}行业产生的影响的简要分析
     3. 相关企业、技术或市场的必要背景信息
     
-    重要提示:
-    - 这些内容必须反映{current_year}年的最新情况，不要包含过时信息
+    要求:
     - 保持客观，专注于事实
     - 按重要性排序
     - 特别关注可能改变行业格局的突发事件
     - 长度控制在800-1000字
     """
     
-    system = f"""你是一位权威的{topic}行业分析师，擅长从复杂信息中提取和总结最重要的行业事件与发展。
-    你的任务是分析{current_year}年的最新行业动态，不要使用或提及旧年份(如2023年)的信息作为当前动态。
-    确保所有分析都基于最新数据，并明确标明这是{current_year}年的行业情况。"""
+    system = f"你是一位权威的{topic}行业分析师，擅长从复杂信息中提取和总结最重要的行业事件与发展。"
     
     try:
         breaking_news_summary = llm_processor.call_llm_api(prompt, system)
-        return f"## {current_year}年{topic}行业重大事件\n\n{breaking_news_summary}\n\n"
+        return f"## 行业重大事件\n\n{breaking_news_summary}\n\n"
     except Exception as e:
         print(f"生成行业重大事件摘要时出错: {str(e)}")
-        return f"## {topic}行业重大事件\n\n暂无{topic}行业重大事件摘要。\n\n"
+        return f"## 行业重大事件\n\n暂无{topic}行业重大事件摘要。\n\n"
 
 def process_innovation_news(llm_processor, topic, innovation_news):
     """处理技术创新新闻"""
@@ -277,11 +254,11 @@ def process_industry_trends(llm_processor, topic, trend_news):
     ])
     
     trend_prompt = f"""
-    请基于以下{topic}行业的最新新闻，分析并总结行业整体趋势和发展方向。
+    请基于以下{topic}行业的最新趋势相关新闻，分析并总结行业整体趋势和发展方向。
     
     {all_news_text}
     
-    请提供详细的行业趋势分析报告，内容需要包括但不限于：
+    请提供详细的行业趋势分析，内容需要包括：
     1. {topic}行业的整体发展趋势和主要特征
     2. 市场规模、增长率和主要驱动因素
     3. 技术发展路线和创新焦点
@@ -298,7 +275,7 @@ def process_industry_trends(llm_processor, topic, trend_news):
     - 适当引用新闻中的关键信息作为支撑
     - 对各个趋势进行详细展开解释，而不仅是罗列要点
     - 使用小标题组织内容，使分析更有结构
-    - 长度要充分，至少1500-2000字
+    - 长度要充分，至少1000-1500字
     """
     
     trend_system = f"""你是一位权威的{topic}行业趋势分析专家，拥有丰富的行业经验和深刻的洞察力。
@@ -314,7 +291,7 @@ def process_industry_trends(llm_processor, topic, trend_news):
         print(f"生成行业趋势分析时出错: {str(e)}")
         return f"## 行业趋势概览\n\n暂无{topic}行业趋势分析。\n\n"
 
-def process_company_news(llm_processor, company, topic, news_items):
+def process_company_news(llm_processor, topic, company, news_items):
     """处理单个公司的新闻"""
     if not news_items:
         return f"### {company}\n\n暂无{company}相关的最新动态。\n\n"
@@ -394,147 +371,82 @@ def generate_comprehensive_trend_summary(llm_processor, topic, all_news_data):
     """生成更为全面的趋势总结章节"""
     print(f"正在为{topic}行业生成全面趋势总结...")
     
-    # 获取当前年份
-    current_year = datetime.now().year
+    # 整合所有类型的新闻以提供全面视角，但优先考虑趋势新闻
+    trend_news = all_news_data.get("trend_news", [])
+    print(f"趋势分析主要基于 {len(trend_news)} 条趋势新闻")
     
-    # 整合所有类型的新闻以提供全面视角
-    all_relevant_news = []
-    for category in ["breaking_news", "innovation_news", "trend_news", "policy_news", "investment_news"]:
-        all_relevant_news.extend(all_news_data.get(category, []))
+    # 其他新闻作为补充
+    other_news = []
+    for category in ["breaking_news", "innovation_news", "policy_news", "investment_news"]:
+        other_news.extend(all_news_data.get(category, []))
+    
+    # 组合所有新闻，但确保趋势新闻位于前列
+    all_relevant_news = trend_news + other_news
     
     # 如果没有足够的新闻数据，返回简单提示
     if len(all_relevant_news) < 3:
-        return f"## {current_year}年{topic}行业趋势总结\n\n目前收集到的{topic}行业数据不足，无法生成全面的趋势总结。\n\n"
+        return f"## 行业趋势总结\n\n目前收集到的{topic}行业数据不足，无法生成全面的趋势总结。\n\n"
     
-    # 提取最关键的新闻信息
-    key_news = "\n\n".join([
-        f"标题: {item.get('title', '无标题')}\n内容: {item.get('content', '无内容')[:300]}...\n来源: {item.get('source', '未知')}\n类型: {item.get('news_type', '未知类型')}"
-        for item in all_relevant_news[:15]  # 最多使用15条最相关的新闻
+    # 提取最关键的新闻信息，区分趋势新闻和其他新闻
+    key_trend_news = "\n\n".join([
+        f"标题: {item.get('title', '无标题')}\n内容: {item.get('content', '无内容')[:300]}...\n来源: {item.get('source', '未知')}\n类型: 趋势新闻"
+        for item in trend_news[:10]  # 最多使用10条趋势新闻
     ])
     
-    summary_prompt = f"""
-    请基于以下关于{topic}行业的综合信息，撰写一份详尽的"{current_year}年{topic}行业趋势总结"章节，对整个行业做全面分析。
+    key_other_news = "\n\n".join([
+        f"标题: {item.get('title', '无标题')}\n内容: {item.get('content', '无内容')[:300]}...\n来源: {item.get('source', '未知')}\n类型: {item.get('news_type', '其他新闻')}"
+        for item in other_news[:10]  # 最多使用10条其他新闻作为补充
+    ])
     
-    {key_news}
+    # 组合新闻内容
+    news_content = key_trend_news
+    if key_other_news:
+        news_content += "\n\n=== 其他补充新闻 ===\n\n" + key_other_news
+    
+    summary_prompt = f"""
+    请基于以下关于{topic}行业的新闻信息，撰写一份详尽的"行业趋势总结"章节，对整个行业做全面分析。
+    
+    {news_content}
     
     你的行业趋势总结需要：
     
-    1. 开篇概述：简明扼要地概括{current_year}年{topic}行业的当前状态和总体发展趋势
+    1. 开篇概述：简明扼要地概括{topic}行业的当前状态和总体发展趋势
     
     2. 分点详析：使用以下4-6个方面作为小标题，对每个方面进行深入剖析（每点至少200字）：
-       - 行业发展新方向：详细分析{current_year}年{topic}行业出现的新趋势和方向
-       - 创新与技术进步：详细分析{current_year}年{topic}行业的技术创新和突破
-       - 政策环境变化：详细分析{current_year}年影响{topic}行业的新政策和监管变化
-       - 市场竞争格局：详细分析{current_year}年{topic}行业主要参与者和竞争态势
-       - 其他你认为重要的行业趋势（如适用）
-    
-    3. 结论展望：对行业未来发展做出有见地的预测
+       - 市场格局变化：详细分析行业中的市场结构、主要玩家和竞争态势的变化
+       - 技术创新趋势：详细分析推动行业发展的关键技术及其应用前景
+       - 用户需求演变：详细分析客户/消费者行为和需求的变化及其影响
+       - 商业模式创新：详细分析新兴的商业模式和盈利方式
+       - 跨界融合发展：详细分析该行业与其他领域的融合创新趋势
+       - 政策影响分析：详细分析监管环境变化及其影响
+       
+    3. 结论展望：对行业未来3-5年的发展做出有见地的预测，包括：
+       - 潜在的增长点和机遇
+       - 可能面临的挑战和风险
+       - 关键成功因素的转变
     
     要求：
-    - 所有分析都必须明确表示这是{current_year}年的最新情况，不要引用或呈现旧年份(如2023年)的数据作为当前情况
     - 所有分析都必须基于提供的新闻信息，同时结合行业知识做深入解读
+    - 优先关注趋势新闻中反映的行业发展趋势
     - 每个小标题下的内容必须详尽，不能简单列点
     - 使用专业术语，但确保非专业人士也能理解
     - 引用具体事实、数据或案例支持你的分析
     - 突出行业发展的关键拐点和重大变革
-    - 总体篇幅不少于1500字
+    - 总体篇幅不少于1800字，确保内容充实且有深度
     """
     
-    summary_system = f"""你是{topic}行业的顶级分析师，拥有深入的行业经验和洞察力。
-    你的任务是分析{current_year}年的最新行业动态，不要使用过时信息，特别是不要将旧年份(如2023年)的信息作为当前动态。
-    确保所有分析都基于最新数据，并明确标明这是{current_year}年的行业情况。
-    你的分析需要详尽、有深度、有结构，能够为读者提供真正的价值。"""
+    summary_system = f"""你是{topic}行业的顶级分析师，拥有15年以上行业经验，对行业发展有深刻理解和独特洞见。
+    你的分析被业内广泛引用，因为它们深入、全面且有前瞻性，能准确把握行业趋势并预测行业未来发展方向。
+    在这次任务中，你需要创作一篇高质量的行业趋势总结章节，它将成为一份完整行业报告的核心部分。
+    你的分析需要详尽、有深度、有结构，能够为读者提供真正的价值和决策参考。"""
     
     try:
         trend_summary = llm_processor.call_llm_api(summary_prompt, summary_system)
-        return f"## {current_year}年{topic}行业趋势总结\n\n{trend_summary}\n\n"
+        return f"## 行业趋势总结\n\n{trend_summary}\n\n"
     except Exception as e:
         print(f"生成行业趋势总结时出错: {str(e)}")
-        fallback_summary = f"无法生成{current_year}年{topic}行业趋势详细总结，请查看报告其他部分获取相关信息。"
-        return f"## {current_year}年{topic}行业趋势总结\n\n{fallback_summary}\n\n"
-
-def refine_report_content(content, llm_processor):
-    """
-    对生成的报告内容进行适度精炼，确保报告简洁有力但保留所有关键内容
-    
-    Args:
-        content: 原始报告内容
-        llm_processor: LLM处理器实例
-    
-    Returns:
-        精炼后的报告内容
-    """
-    logging.info("开始对报告内容进行精炼...")
-    
-    # 确保内容不为空
-    if not content or len(content) < 100:
-        logging.warning("报告内容过短，跳过精炼过程")
-        return content
-    
-    # 先保存报告原始长度和关键部分位置
-    original_length = len(content)
-    
-    # 提取参考来源部分，避免在精炼过程中丢失
-    references_section = ""
-    if "## 参考来源" in content:
-        main_content = content.split("## 参考来源")[0]
-        references_section = "## 参考来源" + content.split("## 参考来源")[1]
-    else:
-        main_content = content
-    
-    # 获取当前年份
-    current_year = datetime.now().year
-    
-    prompt = f"""
-    作为一名专业的报告编辑，请对以下行业报告内容进行适度精炼，遵循以下要求：
-    
-    1. 删除重复或表达相似的内容，确保每个要点只出现一次
-    2. 保持所有关键信息和数据，使整体篇幅更紧凑，但内容减少不应超过20%
-    3. 确保各部分之间逻辑连贯，避免不必要的交叉引用
-    4. 保留报告的完整结构和所有章节标题
-    5. 确保保留所有数据点和关键洞察
-    6. 确保报告语言专业、简洁、明了
-    7. 确保所有内容都反映{current_year}年的最新情况
-    
-    原始报告内容：
-    {main_content}
-    
-    请直接返回精炼后的完整报告内容，不需要额外说明。
-    """
-    
-    system_message = f"""
-    你是一名专业的行业报告编辑，擅长精简内容并保持关键信息。
-    你的任务是适度精炼报告，删除冗余但保留所有重要内容。
-    不要过度删减内容，确保精炼后的报告仍然包含全面的行业分析。
-    确保所有内容都反映{current_year}年的最新情况，不要将旧年份的信息呈现为当前状况。
-    直接返回精炼后的报告内容，不要添加任何解释或元描述。
-    """
-    
-    try:
-        refined_content = llm_processor.call_llm_api(
-            prompt=prompt,
-            system_message=system_message,
-            temperature=0.1,  # 降低温度以获得更可预测的输出
-            max_tokens=4000
-        )
-        
-        # 如果精炼后的内容少于原始内容的50%，可能说明内容被过度精简
-        if len(refined_content) < original_length * 0.5:
-            logging.warning(f"精炼过程可能过度删减内容: 原始长度 {original_length}，精炼后长度 {len(refined_content)}")
-            logging.info("使用原始内容")
-            refined_main_content = main_content
-        else:
-            refined_main_content = refined_content
-        
-        # 重新添加参考来源部分
-        final_content = refined_main_content + "\n\n" + references_section if references_section else refined_main_content
-        
-        logging.info(f"报告内容精炼完成: 原始长度 {original_length}，精炼后长度 {len(final_content)}")
-        return final_content
-    except Exception as e:
-        logging.error(f"报告精炼过程出错: {str(e)}")
-        # 如果精炼失败，返回原始内容
-        return content
+        fallback_summary = "无法生成详细的行业趋势总结，请查看报告其他部分获取相关信息。"
+        return f"## 行业趋势总结\n\n{fallback_summary}\n\n"
 
 def generate_news_report(topic, companies=None, days=7, output_file=None):
     """
@@ -549,21 +461,120 @@ def generate_news_report(topic, companies=None, days=7, output_file=None):
     Returns:
         tuple: (报告文件路径, 报告数据)
     """
-    # 设置日志级别
-    logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
-    
-    # 获取当前年份
-    current_year = datetime.now().year
-    current_date = datetime.now().strftime('%Y-%m-%d')
-    
     # 确保输出目录存在
     os.makedirs(config.OUTPUT_DIR, exist_ok=True)
     
-    logging.info(f"开始生成{current_year}年{topic}行业最新动态报告")
-    logging.info(f"搜索范围: 过去{days}天的相关新闻")
-    
     # 获取并处理新闻数据，使用全面的行业动态收集方法
-    news_data = get_industry_news_comprehensive(topic, days, companies)
+    print(f"\n=== 开始收集{topic}行业全面动态 ===")
+    
+    # 初始化数据收集器和LLM处理器
+    tavily_collector = TavilyCollector()
+    llm_processor = tavily_collector._get_llm_processor()
+    
+    # 首先使用直接搜索获取行业新闻数据，不依赖于特定公司
+    # 这将提供更全面的行业视角，而不是仅关注大公司
+    print(f"使用直接搜索方法收集{topic}行业新闻...")
+    all_news_data = tavily_collector.get_industry_news_direct(topic, days)
+    total_news_count = all_news_data.get("total_count", 0)
+    print(f"共收集到 {total_news_count} 条{topic}行业相关新闻")
+    
+    # 如果提供了公司列表，收集这些公司的特定新闻作为补充
+    company_specifics = []
+    if companies and isinstance(companies, list):
+        print(f"\n=== 收集{len(companies)}家公司特定新闻作为补充 ===")
+        # 调整每家公司的新闻数量，确保不会过于偏重大公司
+        max_news_per_company = max(2, 10 // len(companies))
+        
+        for company in companies:
+            company_news = tavily_collector.get_company_news(
+                company, topic, days, max_results=max_news_per_company
+            )
+            if company_news:
+                # 将公司新闻添加到公司特定部分
+                company_specifics.append({
+                    "company": company,
+                    "news": company_news
+                })
+                print(f"找到 {len(company_news)} 条 {company} 相关新闻")
+            else:
+                print(f"未找到 {company} 相关新闻")
+        
+        # 将公司特定新闻添加到总数据中
+        all_news_data["company_news"] = [item for company_data in company_specifics for item in company_data["news"]]
+    
+    print(f"\n=== 收集完成，开始处理报告内容 ===")
+    
+    # 初始化报告内容
+    content = f"# {topic}行业最新动态报告\n\n"
+    date_str = datetime.now().strftime('%Y-%m-%d')
+    content += f"报告日期: {date_str}\n\n"
+    
+    # 1. 首先处理重大新闻部分
+    breaking_news = all_news_data.get("breaking_news", [])
+    print(f"处理 {len(breaking_news)} 条重大新闻...")
+    breaking_news_content = process_breaking_news(llm_processor, topic, breaking_news)
+    content += breaking_news_content
+    
+    # 2. 处理创新新闻部分
+    innovation_news = all_news_data.get("innovation_news", [])
+    print(f"处理 {len(innovation_news)} 条创新新闻...")
+    innovation_news_content = process_innovation_news(llm_processor, topic, innovation_news)
+    content += innovation_news_content
+    
+    # 3. 处理投资新闻部分
+    investment_news = all_news_data.get("investment_news", [])
+    print(f"处理 {len(investment_news)} 条投资新闻...")
+    investment_news_content = process_investment_news(llm_processor, topic, investment_news)
+    content += investment_news_content
+    
+    # 4. 处理政策监管动态
+    policy_news = all_news_data.get("policy_news", [])
+    print(f"处理 {len(policy_news)} 条政策新闻...")
+    policy_content = process_policy_news(llm_processor, topic, policy_news)
+    content += policy_content
+    
+    # 5. 处理行业趋势新闻
+    trend_news = all_news_data.get("trend_news", [])
+    print(f"处理 {len(trend_news)} 条趋势新闻...")
+    trend_content = process_industry_trends(llm_processor, topic, trend_news)
+    content += trend_content
+    
+    # 6. 如果有公司特定新闻，生成公司动态部分
+    if company_specifics:
+        content += "## 重点公司动态\n\n"
+        print(f"处理 {len(company_specifics)} 家公司的特定新闻...")
+        
+        # 为每个有新闻的公司生成小节
+        for company_data in company_specifics:
+            company = company_data["company"]
+            news_items = company_data["news"]
+            
+            if news_items:
+                company_summary = process_company_news(llm_processor, topic, company, news_items)
+                content += company_summary + "\n\n"
+    
+    # 7. 最后生成趋势总结章节（对整个行业的分析）
+    print("生成全面趋势总结...")
+    trend_summary = generate_comprehensive_trend_summary(llm_processor, topic, all_news_data)
+    content += trend_summary
+    
+    # 8. 收集所有参考资料
+    references = []
+    
+    for news_type in ["breaking_news", "innovation_news", "trend_news", "policy_news", "investment_news", "company_news"]:
+        for item in all_news_data.get(news_type, []):
+            title = item.get('title', '未知标题')
+            url = item.get('url', '#')
+            source = item.get('source', '未知来源')
+            if url != '#':
+                references.append(f"- [{title}]({url}) - {source}")
+    
+    # 去重参考资料
+    unique_references = list(set(references))
+    
+    # 添加参考资料章节
+    content += "\n\n## 参考资料\n\n"
+    content += "\n".join(unique_references)
     
     # 确定输出文件路径
     if not output_file:
@@ -577,56 +588,14 @@ def generate_news_report(topic, companies=None, days=7, output_file=None):
         if output_dir:
             os.makedirs(output_dir, exist_ok=True)
     
-    # 替换标题和日期信息，确保使用当前年份
-    if "content" in news_data:
-        # 替换标题中可能的旧年份
-        title_pattern = r"# (.+?)行业最新动态"
-        if re.search(title_pattern, news_data["content"]):
-            updated_title = f"# {current_year}年{topic}行业最新动态报告"
-            news_data["content"] = re.sub(title_pattern, updated_title, news_data["content"])
-        
-        # 更新报告日期
-        date_pattern = r"报告生成日期: \d{4}-\d{2}-\d{2}"
-        if re.search(date_pattern, news_data["content"]):
-            news_data["content"] = re.sub(date_pattern, f"报告生成日期: {current_date}", news_data["content"])
-    
     # 写入报告
     with open(output_file, 'w', encoding='utf-8-sig') as f:
-        f.write(news_data["content"])
+        f.write(content)
     
-    logging.info(f"报告初稿已保存至: {output_file}")
-    
-    # 获取LLM处理器
-    tavily_collector = TavilyCollector()
-    llm_processor = tavily_collector._get_llm_processor()
-    
-    if llm_processor:
-        logging.info("开始对报告内容进行精炼...")
-        try:
-            # 对报告内容进行精炼
-            refined_content = refine_report_content(news_data["content"], llm_processor)
-            
-            # 确保精炼内容不为空且包含关键部分
-            if refined_content and "## 参考来源" in refined_content:
-                # 使用精炼后的内容覆盖原文件
-                with open(output_file, 'w', encoding='utf-8') as f:
-                    f.write(refined_content)
-                
-                logging.info("报告内容精炼完成")
-                # 更新返回的内容
-                news_data["content"] = refined_content
-            else:
-                logging.warning("精炼后内容质量不佳，将使用原始报告内容")
-        except Exception as e:
-            logging.error(f"报告精炼过程出错: {str(e)}")
-            logging.info("将使用原始报告内容")
-    else:
-        logging.warning("无法获取LLM处理器，将使用原始报告内容")
-    
-    print(f"\n=== {current_year}年{topic}行业最新动态报告生成完成 ===")
+    print(f"\n=== 行业最新动态报告生成完成 ===")
     print(f"报告已保存至: {output_file}")
     
-    return output_file, news_data
+    return output_file, {"content": content, "data": all_news_data, "date": date_str}
 
 if __name__ == "__main__":
     # 加载环境变量
@@ -639,6 +608,21 @@ if __name__ == "__main__":
                       help='要特别关注的公司（可选）')
     parser.add_argument('--days', type=int, default=7, help='搜索内容的天数范围')
     parser.add_argument('--output', type=str, help='输出文件名或路径')
+    
+    # 添加说明文档
+    parser.epilog = """
+    报告生成说明:
+    1. 本工具现已优化为"行业优先"的信息采集模式，更全面地覆盖整个行业动态
+    2. 报告将包含以下主要内容:
+       - 行业概况：对指定行业的整体概述
+       - 突发新闻：最新重要事件的分析
+       - 前沿创新：研发与技术突破的分析
+       - 投资动态：资金流向与投资趋势分析
+       - 政策法规：监管变化与政策影响分析
+       - 行业趋势总结：基于所有收集信息的综合分析，特别关注趋势类新闻
+    3. 使用示例:
+       python generate_news_report.py --topic "人工智能" --days 10 --output "AI行业动态报告.md"
+    """
     
     args = parser.parse_args()
     
