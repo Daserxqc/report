@@ -417,11 +417,27 @@ def get_research_data(topic, subtopics=None, days=7):
     academic_papers = [item for item in research_items if item["is_academic"]]
     insight_articles = [item for item in research_items if item["is_insight"]]
     
-    # 选择最多10篇文章进行详细分析，优先选择学术论文
-    analysis_items = academic_papers[:8]  # 最多8篇学术论文
-    if len(analysis_items) < 10:
-        # 如果学术论文不足10篇，添加研究见解直到达到10篇
-        analysis_items.extend(insight_articles[:10-len(analysis_items)])
+    # 修改为最多3-4篇文章进行详细分析，优先选择核心学术论文
+    # 首先按照研究类型排序
+    core_papers = [paper for paper in academic_papers if paper.get("research_type") == "核心"]
+    other_papers = [paper for paper in academic_papers if paper.get("research_type") != "核心"]
+    
+    # 优先选择核心论文，最多选择4篇
+    analysis_items = core_papers[:4]
+    
+    # 如果核心论文不足4篇，添加其他高相关性论文直到达到4篇
+    if len(analysis_items) < 4:
+        # 按相关性分数对其他论文排序
+        other_papers.sort(key=lambda x: x.get("relevance_score", 0), reverse=True)
+        analysis_items.extend(other_papers[:4-len(analysis_items)])
+    
+    # 如果学术论文总数不足4篇，可以添加1篇研究见解
+    if len(analysis_items) < 3 and insight_articles:
+        # 按相关性排序研究见解
+        insight_articles.sort(key=lambda x: x.get("relevance_score", 0), reverse=True)
+        analysis_items.extend(insight_articles[:1])
+    
+    print(f"选择了 {len(analysis_items)} 篇论文进行详细分析")
     
     article_analyses = []
     for item in analysis_items:
@@ -532,6 +548,8 @@ def get_research_data(topic, subtopics=None, days=7):
 {future_outlook}
 
 # 主要研究论文分析
+
+本节选取该领域最具代表性和创新性的3-4篇核心论文进行深入分析。
 
 {'\n\n'.join(article_analyses)}
 """
