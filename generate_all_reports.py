@@ -4,6 +4,8 @@ import time
 from datetime import datetime
 from dotenv import load_dotenv
 import json
+import sys
+from fix_md_headings import fix_markdown_headings
 
 import config
 from generate_news_report import generate_news_report
@@ -149,6 +151,10 @@ def generate_combined_report(topic, subtopics=None, companies=None, days=7):
     print(f"- 研究方向: {research_filepath}")
     print(f"- 行业洞察: {insights_filepath}")
     print(f"索引文件: {index_filepath}")
+    
+    # 修复报告中的标题问题
+    print("正在优化报告标题格式...")
+    fix_markdown_headings(combined_filepath)
     
     return combined_filepath
 

@@ -3,6 +3,8 @@ import json
 import argparse
 from datetime import datetime
 from dotenv import load_dotenv
+import sys
+from fix_md_headings import fix_markdown_headings
 
 from collectors.tavily_collector import TavilyCollector
 from generators.report_generator import ReportGenerator
@@ -594,6 +596,10 @@ def generate_news_report(topic, companies=None, days=7, output_file=None):
     
     print(f"\n=== 行业最新动态报告生成完成 ===")
     print(f"报告已保存至: {output_file}")
+    
+    # 修复报告中的标题问题
+    print("正在优化报告标题格式...")
+    fix_markdown_headings(output_file)
     
     return output_file, {"content": content, "data": all_news_data, "date": date_str}
 

@@ -3,6 +3,8 @@ import json
 import argparse
 from datetime import datetime
 from dotenv import load_dotenv
+import sys
+from fix_md_headings import fix_markdown_headings
 
 from collectors.arxiv_collector import ArxivCollector
 from collectors.tavily_collector import TavilyCollector
@@ -617,6 +619,10 @@ def generate_research_report(topic, subtopics=None, days=7, output_file=None):
     
     print(f"\n=== 研究方向报告生成完成 ===")
     print(f"报告已保存至: {output_file}")
+    
+    # 修复报告中的标题问题
+    print("正在优化报告标题格式...")
+    fix_markdown_headings(output_file)
     
     return output_file, research_data
 

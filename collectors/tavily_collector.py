@@ -833,7 +833,22 @@ class TavilyCollector:
                     url = item.get("url", "#")
                     
                     # 使用三级标题突出小节标题
-                    section_content += f"### {title}\n\n"
+                    # 检查标题是否已经包含section_name，如果包含则不重复添加
+                    clean_title = title
+                    if section_name in title:
+                        # 如果标题以section_name开头，则删除这部分重复内容
+                        if title.startswith(section_name):
+                            clean_title = title[len(section_name):].strip()
+                            # 如果清理后标题以常见分隔符开头，去掉分隔符
+                            for sep in [':', '：', '-', '—', '–', '|', '：']:
+                                if clean_title.startswith(sep):
+                                    clean_title = clean_title[1:].strip()
+                                    break
+                        # 使用处理后的标题
+                        section_content += f"### {clean_title}\n\n"
+                    else:
+                        # 使用原标题
+                        section_content += f"### {clean_title}\n\n"
                     
                     # 添加内容概要
                     summary = item_content[:500] + "..." if len(item_content) > 500 else item_content

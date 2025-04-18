@@ -34,12 +34,62 @@ def main():
     # 如果没有提供主题，尝试从文件名猜测
     if not report_topic:
         filename = Path(report_path).stem
+        
+        # 首先尝试从文件名中识别报告类型
+        report_types = {
+            "research": ["research", "研究"],
+            "news": ["news", "动态", "新闻"],
+            "insights": ["insights", "洞察", "趋势"]
+        }
+        
+        # 识别文件名中包含的报告类型
+        detected_type = None
+        for type_key, indicators in report_types.items():
+            for indicator in indicators:
+                if indicator in filename.lower():
+                    detected_type = type_key
+                    break
+            if detected_type:
+                break
+        
+        # 如果文件名中包含报告类型，更新报告类型
+        if detected_type and report_type == 'news':  # 只在用户未明确指定类型时更新
+            report_type = detected_type
+            print(f"从文件名检测到报告类型: {report_type}")
+        
+        # 提取主题
         if "行业" in filename:
             report_topic = filename.split("行业")[0]
-            print(f"从文件名猜测报告主题: {report_topic}")
         else:
-            report_topic = filename.split("_")[0]
-            print(f"从文件名猜测报告主题: {report_topic}")
+            parts = filename.split("_")
+            
+            # 移除包含报告类型和日期的部分
+            filtered_parts = []
+            for part in parts:
+                # 检查是否为报告类型关键词
+                is_report_type = False
+                for type_indicators in report_types.values():
+                    if any(indicator in part.lower() for indicator in type_indicators):
+                        is_report_type = True
+                        break
+                
+                # 检查是否为日期(包含数字)
+                has_digits = any(char.isdigit() for char in part)
+                
+                # 保留非报告类型且非日期的部分
+                if not is_report_type and not has_digits and part.lower() != "report":
+                    filtered_parts.append(part)
+            
+            # 如果过滤后没有部分，使用第一个非日期部分
+            if not filtered_parts:
+                for part in parts:
+                    if not any(char.isdigit() for char in part):
+                        filtered_parts.append(part)
+                        break
+            
+            report_topic = "_".join(filtered_parts)
+        
+        print(f"从文件名猜测报告主题: {report_topic}")
     
     # 读取报告内容
     try:
