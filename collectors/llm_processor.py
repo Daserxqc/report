@@ -178,11 +178,20 @@ class LLMProcessor:
         Returns:
             str: 生成的章节内容
         """
-        # 收集所有内容
+        # 收集所有内容和URL
         all_contents = []
+        all_urls = []
+        titles_with_urls = []
+        
         for item in section_items:
             if "content" in item and item["content"]:
                 all_contents.append(item["content"])
+                # 收集URL和标题
+                url = item.get("url", "#")
+                title = item.get("title", "未知标题")
+                if url != "#":
+                    all_urls.append(url)
+                    titles_with_urls.append(f"- {title}: {url}")
                 
         if not all_contents:
             return f"关于{topic}的{section_name}，目前暂无充分资料。"
@@ -203,6 +212,9 @@ class LLMProcessor:
             focus = "行业前景预测、发展趋势、机遇与挑战、战略建议等"
         else:
             focus = f"{section_name}相关的关键信息"
+        
+        # 准备URL参考列表
+        url_references = "\n".join(titles_with_urls) if titles_with_urls else "暂无可用URL"
             
         system_message = f"""你是一位专业的{topic}行业分析师，擅长撰写高质量的行业报告。
 基于提供的材料，请撰写一篇关于{topic}的{section_name}分析。
@@ -216,6 +228,9 @@ class LLMProcessor:
 
 {combined_content}
 
+以下是可引用的来源URL列表，请在适当位置引用这些真实URL：
+{url_references}
+
 撰写要求：
 1. 重点关注{focus}
 2. 使用专业、客观的语言风格
@@ -225,7 +240,9 @@ class LLMProcessor:
 6. 文章应当是完整的，具有内在逻辑和连贯性
 7. 直接给出文章内容，不要添加标题或额外说明
 8. 减少括号的使用，避免过多术语解释，使行文更加自然
-9. 对重要数据或概念使用加粗格式突出显示"""
+9. 对重要数据或概念使用加粗格式突出显示
+10. 在每个主要段落后单独一行添加来源链接，格式为"链接：URL"，使用上面提供的真实URL列表中的链接
+11. 确保每段最多引用一个来源，不要使用"https://example.com"等示例URL"""
 
         try:
             result = self.call_llm_api(prompt, system_message, temperature=0.4, max_tokens=2000)
@@ -238,7 +255,11 @@ class LLMProcessor:
             fallback_content = f"根据搜集的资料，{topic}的{section_name}主要包括以下几个方面：\n\n"
             # 提取每个来源的前200个字符作为备用
             for i, content in enumerate(all_contents[:3]):
+                # 获取对应的URL
+                url = section_items[i].get('url', '#') if i < len(section_items) else '#'
                 fallback_content += f"● {content[:200]}...\n\n"
+                if url != '#':
+                    fallback_content += f"链接：{url}\n\n"
             return fallback_content
             
     def organize_search_results(self, raw_results: List[Dict[str, Any]], topic: str) -> Dict[str, Any]:
@@ -316,24 +337,33 @@ class LLMProcessor:
                 
             print(f"正在生成'{section_name}'章节，处理{len(section_items)}个条目")
             
-            # 使用LLM生成章节内容
-            section_content = self.generate_section_content(section_items, topic, section_name)
+            # 提取所有章节资料和URL，准备进行统一整合
+            section_materials = []
+            section_urls = []
+            for item in section_items:
+                section_materials.append({
+                    "title": item.get("title", ""),
+                    "content": item.get("content", ""),
+                    "url": item.get("url", "#")
+                })
+                url = item.get("url", "#")
+                if url != "#" and url not in section_urls:
+                    section_urls.append(url)
+            
+            # 使用LLM对该章节内的所有内容进行整合，生成连贯的章节内容
+            section_content = self._generate_coherent_section_content(section_name, section_materials, topic)
             
             # 添加到报告 - 使用二级标题
             report_content += f"## {section_name}\n\n"
             report_content += section_content + "\n\n"
             
-            # 添加参考来源
-            report_content += "**参考来源**:\n"
-            for idx, item in enumerate(section_items[:3]):
-                report_content += f"- [{item['title']}]({item['url']})\n"
-                
-            report_content += "\n\n"
+            # 不再添加单独的参考来源部分，因为来源已经内嵌在内容中
             
-            # 添加到结构化章节
+            # 添加到结构化章节，包含URL信息
             structured_sections.append({
                 "title": section_name,
-                "content": section_content
+                "content": section_content,
+                "url": section_urls[0] if section_urls else "#"  # 添加第一个URL作为章节的主要来源
             })
             
         # 返回完整报告
@@ -346,6 +376,99 @@ class LLMProcessor:
             "sections": structured_sections,
             "date": current_date
         }
+        
+    def _generate_coherent_section_content(self, section_name: str, materials: List[Dict[str, Any]], topic: str) -> str:
+        """
+        生成连贯的章节内容，而不是简单拼接
+        
+        Args:
+            section_name: 章节名称
+            materials: 包含该章节所有材料的列表，每项包含title、content和url
+            topic: 主题
+            
+        Returns:
+            str: 生成的连贯章节内容
+        """
+        if not materials:
+            return f"目前暂无{topic}的{section_name}相关内容。"
+            
+        # 收集所有内容和URL
+        all_contents = []
+        urls_with_titles = []
+        
+        for item in materials:
+            content = item.get("content", "")
+            if content:
+                all_contents.append(content)
+            
+            url = item.get("url", "#")
+            title = item.get("title", "未知标题")
+            if url != "#":
+                urls_with_titles.append(f"- {title}: {url}")
+                
+        # 合并内容以便LLM进行整合
+        combined_content = "\n\n---\n\n".join(all_contents)
+        urls_text = "\n".join(urls_with_titles)
+        
+        # 确定章节主题焦点
+        if section_name == "行业概况":
+            focus = "行业定义、特点、发展历程、产业链结构、主要参与者等"
+        elif section_name == "政策支持":
+            focus = "政策环境、法规框架、政府支持措施、国内外政策比较等"
+        elif section_name == "市场规模":
+            focus = "市场规模数据、增长率、地区分布、细分市场占比等"
+        elif section_name == "技术趋势":
+            focus = "关键技术发展方向、创新突破、技术路线图等"
+        elif section_name == "未来展望":
+            focus = "行业前景预测、发展趋势、机遇与挑战、战略建议等"
+        else:
+            focus = f"{section_name}相关的关键信息"
+            
+        system_message = f"""你是一位专业的{topic}行业分析师，擅长撰写有深度、连贯且结构清晰的{section_name}章节内容。
+你需要基于提供的多个资料，创建一个完整、连贯的章节，不是简单地拼接资料。
+内容应该层次分明，各部分之间有良好的过渡，表现出一个整体性的分析。
+确保所有重要数据和观点都被整合进来，同时保持内容的深度和专业性。
+使用中性、专业的语言风格，避免营销性或夸张的表述。"""
+
+        prompt = f"""请基于以下关于{topic}的{section_name}资料，创建一个连贯、结构清晰且有深度的章节内容：
+
+{combined_content}
+
+可引用的来源URL：
+{urls_text}
+
+请遵循以下指南：
+1. 重点关注{focus}，确保内容全面且深入
+2. 创建一个连贯的叙述，而不是简单拼接资料
+3. 使用明确的段落结构，重要概念用**加粗**标记
+4. 在适当位置添加小标题，增强可读性
+5. 确保各部分之间有自然过渡，逻辑流畅
+6. 整合所有重要数据点和洞见，避免重复
+7. 在每个关键论点后添加来源链接（单独一行），格式为"链接：URL"
+8. 确保每个来源URL都从上面提供的列表中选择，不要使用虚构的URL
+9. 语言风格专业、客观且分析性强
+10. 内容长度适中，大约800-1200字
+
+请直接提供章节内容，不要添加任何解释或元说明。"""
+
+        try:
+            # 使用更高温度参数以生成更连贯的内容
+            section_content = self.call_llm_api(prompt, system_message, temperature=0.4, max_tokens=2000)
+            # 清理可能的元说明
+            section_content = re.sub(r'^(以下是|这是|这篇文章是|下面是).*?[:：]', '', section_content, flags=re.IGNORECASE).strip()
+            return section_content
+        except Exception as e:
+            print(f"生成连贯章节内容时出错: {str(e)}")
+            # 失败时回退到简单合并内容
+            fallback_content = ""
+            for i, content in enumerate(all_contents[:3]):
+                if i < len(materials):
+                    title = materials[i].get("title", "")
+                    url = materials[i].get("url", "#")
+                    fallback_content += f"### {title}\n\n{content[:500]}...\n\n"
+                    if url != "#":
+                        fallback_content += f"链接：{url}\n\n"
+            return fallback_content
         
     def translate_text(self, text: str, target_language: str = "中文") -> str:
         """

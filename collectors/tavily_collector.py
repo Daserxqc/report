@@ -788,6 +788,36 @@ class TavilyCollector:
                 print(f"使用LLM处理器组织{len(raw_results)}条搜索结果数据")
                 try:
                     result = llm_processor.organize_search_results(raw_results, topic)
+                    
+                    # 增加一个步骤：对整个报告内容进行深度整合和结构化优化
+                    print("对报告内容进行深度整合和结构优化...")
+                    sections = result.get("sections", [])
+                    all_section_contents = []
+                    all_sources = []
+                    
+                    for section in sections:
+                        section_title = section.get("title", "")
+                        section_content = section.get("content", "")
+                        section_url = section.get("url", "#")
+                        
+                        # 收集所有内容和来源
+                        all_section_contents.append({
+                            "title": section_title,
+                            "content": section_content,
+                            "url": section_url
+                        })
+                        
+                        if section_url != "#":
+                            all_sources.append({
+                                "title": section_title,
+                                "url": section_url
+                            })
+                    
+                    # 使用LLM进行深度整合
+                    if all_section_contents:
+                        integrated_content = self._integrate_report_content(llm_processor, topic, all_section_contents)
+                        result["content"] = integrated_content
+                    
                     # 规范化报告内容的标题结构
                     result["content"] = self._normalize_heading_structure(result["content"])
                     return result
@@ -854,6 +884,10 @@ class TavilyCollector:
                     summary = item_content[:500] + "..." if len(item_content) > 500 else item_content
                     section_content += f"{summary}\n\n"
                     
+                    # 添加来源链接（单独一行），与news报告保持一致的格式
+                    if url and url != "#":
+                        section_content += f"链接：{url}\n\n"
+                    
                     # 收集参考资料
                     section_references.append(f"- [{title}]({url})")
                 
@@ -896,6 +930,68 @@ class TavilyCollector:
             # 规范化最终生成的报告内容
             result["content"] = self._normalize_heading_structure(result["content"])
             return result
+            
+    def _integrate_report_content(self, llm_processor, topic, sections):
+        """
+        对报告内容进行深度整合和结构优化，使得各部分之间更加连贯
+        
+        Args:
+            llm_processor: LLM处理器实例
+            topic: 主题
+            sections: 报告各章节内容列表
+            
+        Returns:
+            str: 整合优化后的报告内容
+        """
+        print(f"对{topic}行业洞察报告进行深度内容整合...")
+        
+        # 准备各个章节的内容和来源
+        sections_text = ""
+        for i, section in enumerate(sections):
+            title = section.get("title", f"章节{i+1}")
+            content = section.get("content", "")
+            url = section.get("url", "#")
+            
+            sections_text += f"## {title}\n\n{content}\n\n"
+            
+        # 为LLM提供详细指导
+        system_message = f"""你是一位顶尖的{topic}行业分析师，负责撰写结构清晰、内容连贯的高质量行业洞察报告。
+你需要对提供的各章节内容进行深度整合和优化，使报告更具专业性、逻辑性和连贯性。
+报告应当是完整的行业分析，而不是简单的文章拼接。
+保留所有重要的数据、观点和链接引用，但要以更流畅的方式组织它们。
+确保各章节之间有自然的过渡，逻辑连贯，结构合理。"""
+
+        prompt = f"""我提供给你一份{topic}行业洞察报告的初稿，包含多个章节。请对整个报告进行深度整合和优化：
+
+{sections_text}
+
+具体要求：
+1. 重新组织内容，使各部分之间有更好的连贯性和逻辑流程，但保持原有的章节结构
+2. 优化内容表达，避免各章节之间的重复或冲突观点
+3. 适当添加过渡语句，使内容流转自然
+4. 统一全文的语言风格和专业术语使用
+5. 确保每个章节都有明确的焦点和价值主张
+6. 保留"链接：URL"格式的来源引用，确保它们出现在相关段落之后
+7. 清晰区分事实与观点
+8. 保持Markdown格式，特别是标题层级和段落结构
+9. 提升报告整体的可读性和专业性
+
+请提供优化后的完整报告内容，直接输出优化后的Markdown文本，不要添加任何说明性文字。"""
+        
+        try:
+            integrated_content = llm_processor.call_llm_api(
+                prompt, 
+                system_message,
+                temperature=0.3,
+                max_tokens=3000
+            )
+            
+            print("内容整合完成，报告结构和连贯性已优化")
+            return integrated_content
+        except Exception as e:
+            print(f"内容整合失败: {str(e)}")
+            # 如果整合失败，返回原始拼接内容
+            return f"# {topic}行业洞察报告\n\n{sections_text}"
 
     def get_industry_trends(self, topic, days_back=7, max_results=10):
         """

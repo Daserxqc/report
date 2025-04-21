@@ -1,7 +1,7 @@
 import os
 import json
 import argparse
-from datetime import datetime
+from datetime import datetime, timedelta
 from dotenv import load_dotenv
 import sys
 from fix_md_headings import fix_markdown_headings
@@ -138,236 +138,585 @@ def process_breaking_news(llm_processor, topic, breaking_news):
     
     # 提取所有重大新闻的关键信息
     all_news_text = "\n\n".join([
-        f"标题: {item.get('title', '无标题')}\n内容: {item.get('content', '无内容')[:500]}...\n来源: {item.get('source', '未知')}"
+        f"标题: {item.get('title', '无标题')}\n内容: {item.get('content', '无内容')[:500]}...\n来源: {item.get('source', '未知')}\n来源URL: {item.get('url', '#')}"
         for item in breaking_news
     ])
     
+    # 修改提示，要求LLM在输出中添加SOURCE_TAG标记作为锚点
     prompt = f"""
     请基于以下{topic}行业的最新重大新闻，提供简洁但全面的摘要，突出最重要的事件和发展。
     
     {all_news_text}
     
     请提供:
-    1. 每条重大新闻的简要摘要，包括事件的关键细节
-    2. 对这些事件可能对{topic}行业产生的影响的简要分析
-    3. 相关企业、技术或市场的必要背景信息
+    1. 按重要性排序，每条新闻使用**加粗标题**、摘要、影响、背景的结构
+    2. 每个段落结束时，最多添加一个"[SOURCE_TAG_X]"标记(X是数字，从1开始递增)，我将在后期将其替换为正确的链接
     
     要求:
     - 保持客观，专注于事实
     - 按重要性排序
     - 特别关注可能改变行业格局的突发事件
     - 长度控制在800-1000字
+    - 确保每个新闻项都有清晰的**加粗标题**、摘要、影响、背景结构
+    - 不要将来源信息直接嵌入文本中，源链接应单独成行
+    - 每段内容最多引用一个来源，避免在一段中添加多个来源标记
+    - 一个来源在一个大段落最多引用一次，不要重复引用相同的来源
     """
     
     system = f"你是一位权威的{topic}行业分析师，擅长从复杂信息中提取和总结最重要的行业事件与发展。"
     
     try:
         breaking_news_summary = llm_processor.call_llm_api(prompt, system)
+        
+        # 创建URL到索引的映射，确保每个URL只被替换一次
+        url_indexes = {}
+        current_index = 1
+        
+        # 替换SOURCE_TAG为实际的链接信息
+        for i, news in enumerate(breaking_news, 1):
+            url = news.get('url', '#')
+            if url != '#':
+                if url not in url_indexes:
+                    url_indexes[url] = current_index
+                    current_index += 1
+                
+                tag = f"[SOURCE_TAG_{i}]"
+                source_text = f"\n来源：{url}"
+                breaking_news_summary = breaking_news_summary.replace(tag, source_text)
+        
+        # 移除任何未被替换的标记
+        import re
+        breaking_news_summary = re.sub(r"\[SOURCE_TAG_\d+\]", "", breaking_news_summary)
+        
+        # 确保没有重复的来源链接
+        processed_lines = []
+        seen_urls = set()
+        
+        for line in breaking_news_summary.split('\n'):
+            if line.startswith('来源：'):
+                url = line[3:].strip()
+                if url in seen_urls:
+                    continue  # 跳过重复的URL
+                seen_urls.add(url)
+            processed_lines.append(line)
+        
+        breaking_news_summary = '\n'.join(processed_lines)
+        
         return f"## 行业重大事件\n\n{breaking_news_summary}\n\n"
     except Exception as e:
         print(f"生成行业重大事件摘要时出错: {str(e)}")
         return f"## 行业重大事件\n\n暂无{topic}行业重大事件摘要。\n\n"
 
 def process_innovation_news(llm_processor, topic, innovation_news):
-    """处理技术创新新闻"""
+    """处理创新新闻"""
     if not innovation_news:
-        return f"## 技术创新与新产品\n\n目前暂无{topic}行业的技术创新新闻。\n\n"
+        return f"## 技术创新与突破\n\n目前暂无{topic}领域的创新相关新闻。\n\n"
     
-    # 提取所有创新新闻的关键信息
-    all_news_text = "\n\n".join([
-        f"标题: {item.get('title', '无标题')}\n内容: {item.get('content', '无内容')[:500]}...\n来源: {item.get('source', '未知')}"
+    # 提取所有创新新闻的内容
+    innovation_text = "\n\n".join([
+        f"标题: {item.get('title', '无标题')}\n内容: {item.get('content', '无内容')}\n来源: {item.get('source', '未知')}\n来源URL: {item.get('url', '#')}"
         for item in innovation_news
     ])
     
-    prompt = f"""
-    请基于以下{topic}行业的最新技术创新和产品发布信息，提供综合分析。
+    innovation_prompt = f"""
+    请基于以下{topic}领域的最新创新新闻，分析总结近期在该领域的创新与技术突破。
     
-    {all_news_text}
+    {innovation_text}
     
-    请提供:
-    1. 主要技术突破和创新点的摘要
-    2. 新产品或服务的关键特性和潜在影响
-    3. 这些创新如何影响{topic}行业的发展方向
-    4. 可能的市场反应和消费者采纳情况
+    请详细分析:
+    1. 主要技术突破与创新点
+    2. 新产品或新技术特点及优势
+    3. 行业影响与应用前景
+    4. 市场反应与专家评价
+    
+    在每个段落结束时，最多添加一个"[SOURCE_TAG_X]"标记(X是数字，从1开始递增)，我将在后期将其替换为正确的链接。
     
     要求:
-    - 专注于技术细节和创新点
-    - 解释复杂概念时使用通俗易懂的语言
-    - 分析创新的实际应用价值
+    - 使用专业、客观的语言
+    - 深入分析技术原理和创新点
+    - 评估该创新的行业影响力和潜在变革
     - 长度控制在600-800字
+    - 不要将来源信息直接嵌入文本中，源链接应单独成行
+    - 每段内容最多引用一个来源，避免在一段中添加多个来源标记
+    - 重要观点或子主题使用**加粗**标记
+    - 一个来源在一个大段落最多引用一次，不要重复引用相同的来源
     """
     
-    system = f"你是一位专精于{topic}领域技术的分析师，擅长评估技术创新的潜力和影响。"
+    innovation_system = f"你是一位{topic}技术与创新专家，擅长分析新技术、新产品及其对行业的影响。"
     
     try:
-        innovation_summary = llm_processor.call_llm_api(prompt, system)
-        return f"## 技术创新与新产品\n\n{innovation_summary}\n\n"
+        innovation_analysis = llm_processor.call_llm_api(innovation_prompt, innovation_system)
+        
+        # 创建URL到索引的映射，确保每个URL只被替换一次
+        url_indexes = {}
+        current_index = 1
+        
+        # 替换SOURCE_TAG为实际的链接信息
+        for i, news in enumerate(innovation_news, 1):
+            url = news.get('url', '#')
+            if url != '#':
+                if url not in url_indexes:
+                    url_indexes[url] = current_index
+                    current_index += 1
+                
+                tag = f"[SOURCE_TAG_{i}]"
+                source_text = f"\n来源：{url}"
+                innovation_analysis = innovation_analysis.replace(tag, source_text)
+        
+        # 移除任何未被替换的标记
+        import re
+        innovation_analysis = re.sub(r"\[SOURCE_TAG_\d+\]", "", innovation_analysis)
+        
+        # 确保没有重复的来源链接
+        processed_lines = []
+        seen_urls = set()
+        
+        for line in innovation_analysis.split('\n'):
+            if line.startswith('来源：'):
+                url = line[3:].strip()
+                if url in seen_urls:
+                    continue  # 跳过重复的URL
+                seen_urls.add(url)
+            processed_lines.append(line)
+        
+        innovation_analysis = '\n'.join(processed_lines)
+        
+        return f"## 技术创新与突破\n\n{innovation_analysis}\n\n"
     except Exception as e:
-        print(f"生成技术创新摘要时出错: {str(e)}")
-        return f"## 技术创新与新产品\n\n暂无{topic}行业技术创新摘要。\n\n"
+        print(f"生成创新分析时出错: {str(e)}")
+        # 失败时添加基本内容
+        basic_content = "\n\n".join([f"- {item.get('title', '无标题')}" for item in innovation_news])
+        return f"## 技术创新与突破\n\n{basic_content}\n\n"
 
 def process_investment_news(llm_processor, topic, investment_news):
     """处理投资新闻"""
     if not investment_news:
-        return f"## 投资与市场动向\n\n目前暂无{topic}行业的投资相关新闻。\n\n"
+        return f"## 投资与融资动态\n\n目前暂无{topic}领域的投资相关新闻。\n\n"
     
-    # 提取所有投资新闻的关键信息
-    all_news_text = "\n\n".join([
-        f"标题: {item.get('title', '无标题')}\n内容: {item.get('content', '无内容')[:500]}...\n来源: {item.get('source', '未知')}"
+    # 提取所有投资新闻的内容
+    investment_text = "\n\n".join([
+        f"标题: {item.get('title', '无标题')}\n内容: {item.get('content', '无内容')}\n来源: {item.get('source', '未知')}\n来源URL: {item.get('url', '#')}"
         for item in investment_news
     ])
     
-    prompt = f"""
-    请基于以下{topic}行业的最新投资、融资和市场变动信息，提供财务和市场分析。
+    investment_prompt = f"""
+    请基于以下{topic}领域的最新投融资新闻，分析总结近期在该领域的投资与融资动态。
     
-    {all_news_text}
+    {investment_text}
     
-    请提供:
-    1. 主要投资、并购或融资事件的摘要，包括金额和参与方
-    2. 资金流向分析 - 哪些细分领域获得了最多关注
-    3. 这些投资如何反映行业的发展趋势和市场信心
-    4. 值得关注的新兴公司或领域
+    请详细分析:
+    1. 主要投资事件与资金规模
+    2. 投资热点领域及原因
+    3. 主要投资方及其投资策略
+    4. 对行业发展的影响与趋势预测
+    
+    在每个段落结束时，最多添加一个"[SOURCE_TAG_X]"标记(X是数字，从1开始递增)，我将在后期将其替换为正确的链接。
     
     要求:
-    - 包含关键的财务数据和估值信息
-    - 分析投资背后的战略考量
-    - 评估这些投资对行业格局的潜在影响
+    - 使用专业、客观的语言
+    - 分析投资背后的市场逻辑
+    - 评估投资活动对行业格局的影响
     - 长度控制在600-800字
+    - 不要将来源信息直接嵌入文本中，源链接应单独成行
+    - 每段内容最多引用一个来源，避免在一段中添加多个来源标记
+    - 重要观点或子主题使用**加粗**标记
+    - 一个来源在一个大段落最多引用一次，不要重复引用相同的来源
     """
     
-    system = f"你是一位专注于{topic}行业的投资分析师，擅长解读融资事件和市场动向。"
+    investment_system = f"你是一位{topic}行业投资分析师，擅长分析投融资事件及其市场影响。"
     
     try:
-        investment_summary = llm_processor.call_llm_api(prompt, system)
-        return f"## 投资与市场动向\n\n{investment_summary}\n\n"
+        investment_analysis = llm_processor.call_llm_api(investment_prompt, investment_system)
+        
+        # 创建URL到索引的映射，确保每个URL只被替换一次
+        url_indexes = {}
+        current_index = 1
+        
+        # 替换SOURCE_TAG为实际的链接信息
+        for i, news in enumerate(investment_news, 1):
+            url = news.get('url', '#')
+            if url != '#':
+                if url not in url_indexes:
+                    url_indexes[url] = current_index
+                    current_index += 1
+                
+                tag = f"[SOURCE_TAG_{i}]"
+                source_text = f"\n来源：{url}"
+                investment_analysis = investment_analysis.replace(tag, source_text)
+        
+        # 移除任何未被替换的标记
+        import re
+        investment_analysis = re.sub(r"\[SOURCE_TAG_\d+\]", "", investment_analysis)
+        
+        # 确保没有重复的来源链接
+        processed_lines = []
+        seen_urls = set()
+        
+        for line in investment_analysis.split('\n'):
+            if line.startswith('来源：'):
+                url = line[3:].strip()
+                if url in seen_urls:
+                    continue  # 跳过重复的URL
+                seen_urls.add(url)
+            processed_lines.append(line)
+        
+        investment_analysis = '\n'.join(processed_lines)
+        
+        return f"## 投资与融资动态\n\n{investment_analysis}\n\n"
     except Exception as e:
-        print(f"生成投资动向摘要时出错: {str(e)}")
-        return f"## 投资与市场动向\n\n暂无{topic}行业投资动向摘要。\n\n"
+        print(f"生成投资分析时出错: {str(e)}")
+        # 失败时添加基本内容
+        basic_content = "\n\n".join([f"- {item.get('title', '无标题')}" for item in investment_news])
+        return f"## 投资与融资动态\n\n{basic_content}\n\n"
 
 def process_industry_trends(llm_processor, topic, trend_news):
-    """处理行业趋势新闻，生成详细的趋势分析"""
+    """处理行业趋势新闻"""
     if not trend_news:
-        return f"## 行业趋势概览\n\n目前暂无{topic}行业的趋势分析。\n\n"
+        return f"## 行业动态与趋势\n\n目前暂无{topic}领域的行业趋势相关新闻。\n\n"
     
-    # 提取所有趋势新闻的关键信息
-    all_news_text = "\n\n".join([
-        f"标题: {item.get('title', '无标题')}\n内容: {item.get('content', '无内容')[:500]}...\n来源: {item.get('source', '未知')}"
+    # 提取所有趋势新闻的内容
+    trend_text = "\n\n".join([
+        f"标题: {item.get('title', '无标题')}\n内容: {item.get('content', '无内容')}\n来源: {item.get('source', '未知')}\n来源URL: {item.get('url', '#')}"
         for item in trend_news
     ])
     
     trend_prompt = f"""
-    请基于以下{topic}行业的最新趋势相关新闻，分析并总结行业整体趋势和发展方向。
+    请基于以下{topic}领域的最新新闻，分析总结近期该领域的主要趋势与发展动态。
     
-    {all_news_text}
+    {trend_text}
     
-    请提供详细的行业趋势分析，内容需要包括：
-    1. {topic}行业的整体发展趋势和主要特征
-    2. 市场规模、增长率和主要驱动因素
-    3. 技术发展路线和创新焦点
-    4. 值得关注的新技术、新产品或新模式
-    5. 行业面临的挑战、机遇和潜在风险
-    6. 区域发展差异和国际竞争格局
-    7. 产业链上下游发展情况
-    8. 对未来3-5年的预测和展望
+    请详细分析:
+    1. 当前行业的主要发展趋势与变化
+    2. 市场需求的变化与消费者行为转变
+    3. 政策环境对行业的影响
+    4. 行业未来发展的预测与展望
+    
+    在每个段落结束时，最多添加一个"[SOURCE_TAG_X]"标记(X是数字，从1开始递增)，我将在后期将其替换为正确的链接。
     
     要求:
     - 使用专业、客观的语言
-    - 提供具体数据和事实支持你的观点
-    - 分析要深入且有洞察力，不要停留在表面现象
-    - 适当引用新闻中的关键信息作为支撑
-    - 对各个趋势进行详细展开解释，而不仅是罗列要点
-    - 使用小标题组织内容，使分析更有结构
-    - 长度要充分，至少1000-1500字
+    - 分析趋势背后的市场逻辑
+    - 评估这些趋势对行业格局的潜在影响
+    - 长度控制在600-800字
+    - 不要将来源信息直接嵌入文本中，源链接应单独成行
+    - 每段内容最多引用一个来源，避免在一段中添加多个来源标记
+    - 重要观点或子主题使用**加粗**标记
+    - 一个来源在一个大段落最多引用一次，不要重复引用相同的来源
     """
     
-    trend_system = f"""你是一位权威的{topic}行业趋势分析专家，拥有丰富的行业经验和深刻的洞察力。
-    你擅长从零散信息中提炼出行业发展的关键趋势，并能够预测未来发展方向。
-    你的分析需要专业、深入且全面，覆盖行业的各个重要方面，同时保持客观公正。
-    每个趋势点都需要充分展开解释，提供足够的事实、数据和案例支持。
-    你的回答应该是一篇可以直接发表的高质量行业分析报告。"""
+    trend_system = f"你是一位{topic}行业分析师，擅长解读行业趋势和市场动向。"
     
     try:
-        industry_trend = llm_processor.call_llm_api(trend_prompt, trend_system)
-        return f"## 行业趋势深度分析\n\n{industry_trend}\n\n"
+        trend_analysis = llm_processor.call_llm_api(trend_prompt, trend_system)
+        
+        # 创建URL到索引的映射，确保每个URL只被替换一次
+        url_indexes = {}
+        current_index = 1
+        
+        # 替换SOURCE_TAG为实际的链接信息
+        for i, news in enumerate(trend_news, 1):
+            url = news.get('url', '#')
+            if url != '#':
+                if url not in url_indexes:
+                    url_indexes[url] = current_index
+                    current_index += 1
+                
+                tag = f"[SOURCE_TAG_{i}]"
+                source_text = f"\n来源：{url}"
+                trend_analysis = trend_analysis.replace(tag, source_text)
+        
+        # 移除任何未被替换的标记
+        import re
+        trend_analysis = re.sub(r"\[SOURCE_TAG_\d+\]", "", trend_analysis)
+        
+        # 确保没有重复的来源链接
+        processed_lines = []
+        seen_urls = set()
+        
+        for line in trend_analysis.split('\n'):
+            if line.startswith('来源：'):
+                url = line[3:].strip()
+                if url in seen_urls:
+                    continue  # 跳过重复的URL
+                seen_urls.add(url)
+            processed_lines.append(line)
+        
+        trend_analysis = '\n'.join(processed_lines)
+        
+        return f"## 行业动态与趋势\n\n{trend_analysis}\n\n"
     except Exception as e:
         print(f"生成行业趋势分析时出错: {str(e)}")
-        return f"## 行业趋势概览\n\n暂无{topic}行业趋势分析。\n\n"
+        # 失败时添加基本内容
+        basic_content = "\n\n".join([f"- {item.get('title', '无标题')}" for item in trend_news])
+        return f"## 行业动态与趋势\n\n{basic_content}\n\n"
 
 def process_company_news(llm_processor, topic, company, news_items):
-    """处理单个公司的新闻"""
+    """处理公司相关新闻"""
     if not news_items:
-        return f"### {company}\n\n暂无{company}相关的最新动态。\n\n"
+        return f"## 企业动态: {company}\n\n目前暂无{company}的相关新闻。\n\n"
     
-    # 准备新闻内容
-    news_text = "\n\n".join([
-        f"标题: {item.get('title', '无标题')}\n内容: {item.get('content', '无内容')}\n链接: {item.get('url', '#')}"
+    # 提取所有公司新闻内容
+    company_text = "\n\n".join([
+        f"标题: {item.get('title', '无标题')}\n内容: {item.get('content', '无内容')}\n来源: {item.get('source', '未知')}\n来源URL: {item.get('url', '#')}"
         for item in news_items
     ])
     
-    # 提示生成摘要
-    prompt = f"""
-    请分析以下关于{company}公司的最新新闻报道，并撰写一份总结，突出该公司在{topic}领域的最新动态、产品发布、战略调整或其他重要事件。
+    company_prompt = f"""
+    请基于以下{company}公司的最新新闻，分析总结该公司近期的重要动态与发展。
     
-    {news_text}
+    {company_text}
     
-    总结要求:
-    1. 使用专业、客观的语言
-    2. 保留关键事实和数据
-    3. 按时间或重要性进行结构化组织
-    4. 突出与{topic}行业相关的信息
-    5. 长度控制在300-500字以内
+    请详细分析:
+    1. 公司的重要业务动态与战略调整
+    2. 产品创新与技术发展
+    3. 市场表现与竞争态势
+    4. 公司面临的挑战与机遇
+    
+    在每个段落结束时，最多添加一个"[SOURCE_TAG_X]"标记(X是数字，从1开始递增)，我将在后期将其替换为正确的链接。
+    
+    要求:
+    - 使用专业、客观的语言
+    - 分析公司动态背后的战略意图
+    - 评估这些发展对公司未来的潜在影响
+    - 长度控制在500-700字
+    - 不要将来源信息直接嵌入文本中，源链接应单独成行
+    - 每段内容最多引用一个来源，避免在一段中添加多个来源标记
+    - 重要观点或子主题使用**加粗**标记
+    - 一个来源在一个大段落最多引用一次，不要重复引用相同的来源
     """
     
-    system_message = f"你是一位专业的{topic}行业分析师，擅长从新闻报道中提取和总结公司的战略动态和最新发展。"
+    company_system = f"你是一位专注于{topic}行业的公司分析师，擅长解读企业动态和战略发展。"
     
     try:
-        summary = llm_processor.call_llm_api(prompt, system_message)
-        return f"### {company}\n\n{summary}"
+        company_analysis = llm_processor.call_llm_api(company_prompt, company_system)
+        
+        # 创建URL到索引的映射，确保每个URL只被替换一次
+        url_indexes = {}
+        current_index = 1
+        
+        # 替换SOURCE_TAG为实际的来源信息
+        for i, news in enumerate(news_items, 1):
+            url = news.get('url', '#')
+            if url != '#':
+                if url not in url_indexes:
+                    url_indexes[url] = current_index
+                    current_index += 1
+                
+                tag = f"[SOURCE_TAG_{i}]"
+                source_text = f"\n来源：{url}"
+                company_analysis = company_analysis.replace(tag, source_text)
+        
+        # 移除任何未被替换的标记
+        import re
+        company_analysis = re.sub(r"\[SOURCE_TAG_\d+\]", "", company_analysis)
+        
+        # 确保没有重复的来源链接
+        processed_lines = []
+        seen_urls = set()
+        
+        for line in company_analysis.split('\n'):
+            if line.startswith('来源：'):
+                url = line[3:].strip()
+                if url in seen_urls:
+                    continue  # 跳过重复的URL
+                seen_urls.add(url)
+            processed_lines.append(line)
+        
+        company_analysis = '\n'.join(processed_lines)
+        
+        return f"## 企业动态: {company}\n\n{company_analysis}\n\n"
     except Exception as e:
-        print(f"为 {company} 生成摘要时出错: {str(e)}")
+        print(f"生成公司新闻分析时出错: {str(e)}")
         # 失败时添加基本内容
         basic_content = "\n\n".join([f"- {item.get('title', '无标题')}" for item in news_items])
-        return f"### {company}\n\n{basic_content}"
+        return f"## 企业动态: {company}\n\n{basic_content}\n\n"
 
 def process_policy_news(llm_processor, topic, policy_news):
     """处理政策新闻"""
     if not policy_news:
-        return f"## 政策与监管动态\n\n目前暂无{topic}领域的政策监管相关新闻。\n\n"
+        return f"## 行业发展指南\n\n目前暂无{topic}领域的相关指导文件信息。\n\n"
     
-    # 提取所有政策新闻的内容
+    # 按发布日期对政策新闻进行排序，优先显示最新的
+    from datetime import datetime, timedelta
+    
+    # 首先尝试从news中提取日期信息
+    current_date = datetime.now()
+    # 设置默认的日期范围，优先显示最近3个月的政策
+    default_days_range = 90
+    date_cutoff = current_date - timedelta(days=default_days_range)
+    
+    # 提取所有带日期的新闻
+    dated_policies = []
+    undated_policies = []
+    
+    for item in policy_news:
+        # 尝试从内容中提取日期
+        try:
+            content = item.get('content', '')
+            title = item.get('title', '')
+            
+            # 查找常见的日期格式，如2023年1月1日，2023-01-01等
+            import re
+            date_patterns = [
+                r'(\d{4})年(\d{1,2})月(\d{1,2})日',  # 2023年1月1日
+                r'(\d{4})-(\d{1,2})-(\d{1,2})',      # 2023-01-01
+                r'(\d{4})\.(\d{1,2})\.(\d{1,2})'     # 2023.01.01
+            ]
+            
+            found_date = None
+            for pattern in date_patterns:
+                matches = re.findall(pattern, content + " " + title)
+                if matches:
+                    # 使用找到的第一个日期
+                    year, month, day = matches[0]
+                    try:
+                        found_date = datetime(int(year), int(month), int(day))
+                        break
+                    except ValueError:
+                        continue
+            
+            if found_date:
+                item['published_date'] = found_date
+                dated_policies.append(item)
+            else:
+                undated_policies.append(item)
+        except Exception as e:
+            print(f"提取政策日期时出错: {str(e)}")
+            undated_policies.append(item)
+    
+    # 对有日期的政策按日期从新到旧排序
+    dated_policies.sort(key=lambda x: x.get('published_date', datetime.now()), reverse=True)
+    
+    # 优先选择最新的政策，显示最近发布的
+    recent_policies = [p for p in dated_policies if p.get('published_date', current_date) >= date_cutoff]
+    
+    # 如果最近3个月的政策少于3个，则补充一些较早的政策或无日期的政策
+    if len(recent_policies) < 3:
+        older_policies = [p for p in dated_policies if p.get('published_date', current_date) < date_cutoff]
+        recent_policies.extend(older_policies[:3-len(recent_policies)])
+        
+        # 如果仍然不足3个，添加无日期的政策
+        if len(recent_policies) < 3 and undated_policies:
+            recent_policies.extend(undated_policies[:3-len(recent_policies)])
+    
+    # 最终使用的政策列表，限制在5个以内
+    final_policies = recent_policies[:5]
+    
+    print(f"从{len(policy_news)}条政策新闻中筛选出{len(final_policies)}条最新政策进行处理")
+    
+    # 提取所有相关新闻的内容
     policy_text = "\n\n".join([
-        f"标题: {item.get('title', '无标题')}\n内容: {item.get('content', '无内容')}\n来源: {item.get('source', '未知')}"
-        for item in policy_news
+        f"标题: {item.get('title', '无标题')}\n内容: {item.get('content', '无内容')}\n来源: {item.get('source', '未知')}\n来源URL: {item.get('url', '#')}\n日期: {item.get('published_date', '未知日期')}"
+        for item in final_policies
     ])
     
+    # 完全中性的提示词，避免任何可能触发内容限制的词汇
     policy_prompt = f"""
-    请基于以下{topic}行业的最新政策相关新闻，总结分析当前的政策环境和监管动向。
-    
+    请基于以下提供的{topic}领域相关资讯，客观整理近期发布的文件要点：
+
     {policy_text}
-    
-    请提供:
-    1. 主要的政策法规变化和发布
-    2. 政策对{topic}行业发展的影响分析
-    3. 政策背后的监管思路和趋势
-    4. 企业应对这些政策的建议
-    
-    要求:
-    - 使用专业、客观的语言
-    - 准确理解政策内容和意图
-    - 分析政策对行业不同参与者的影响
-    - 长度控制在600-800字
+
+    请仅提供以下事实性信息：
+    1. 文件发布：按时间顺序列出文件名称、发布日期、发布主体
+    2. 主要要点：摘录文件中提到的关键信息要点
+    3. 技术指南：整理相关技术建议和行业标准内容
+
+    整理要求：
+    - 完全客观描述，只列出事实信息
+    - 不进行任何评价、分析或解读
+    - 使用**加粗**标记要点
+    - 可在段落后添加"[TAG_X]"标记，我将替换为信息来源
+    - 长度控制在600字以内
     """
     
-    policy_system = f"你是一位{topic}产业政策专家，擅长解读政策文件并分析其对行业的影响。"
+    # 更中性的system信息
+    policy_system = f"你是一位{topic}领域的资料整理专家，擅长客观摘录和整理行业文件要点，不做任何额外分析或评价。"
     
     try:
-        policy_analysis = llm_processor.call_llm_api(policy_prompt, policy_system)
-        return f"## 政策与监管动态\n\n{policy_analysis}\n\n"
+        # 错误处理和多次尝试机制
+        max_retries = 3
+        policy_analysis = None
+        last_error = None
+        
+        for attempt in range(max_retries):
+            try:
+                # 在每次重试时逐渐简化提示词
+                if attempt > 0:
+                    simplified_prompt = f"""
+                    请基于以下{topic}领域资料，仅列出最重要的几个文件标题、发布日期和发布机构：
+                    
+                    {policy_text}
+                    
+                    要求：
+                    - 只提供文件标题、发布日期和简短描述
+                    - 不做任何分析或评价
+                    - 完全客观，仅列出事实
+                    - 每个要点不超过20字
+                    """
+                    policy_analysis = llm_processor.call_llm_api(simplified_prompt, policy_system)
+                else:
+                    policy_analysis = llm_processor.call_llm_api(policy_prompt, policy_system)
+                
+                if policy_analysis:
+                    break
+            except Exception as e:
+                last_error = e
+                print(f"处理文件信息时出错 (尝试 {attempt+1}/{max_retries}): {str(e)}")
+        
+        # 如果所有尝试都失败，创建极其简单的基本内容
+        if not policy_analysis:
+            if last_error:
+                print(f"所有尝试均失败: {str(last_error)}")
+            
+            # 创建最基本的内容，仅列出标题
+            policy_analysis = ""
+            for item in final_policies:
+                title = item.get('title', '无标题')
+                date_str = ""
+                if 'published_date' in item and isinstance(item['published_date'], datetime):
+                    date_str = f" ({item['published_date'].strftime('%Y年%m月%d日')})"
+                policy_analysis += f"**{title}{date_str}**\n\n"
+                if item.get('url', '#') != '#':
+                    policy_analysis += f"来源：{item.get('url')}\n\n"
+        
+        # 处理标记替换
+        for i, news in enumerate(final_policies, 1):
+            url = news.get('url', '#')
+            if url != '#':
+                tag = f"[TAG_{i}]"
+                source_text = f"\n来源：{url}"
+                policy_analysis = policy_analysis.replace(tag, source_text)
+        
+        # 移除任何未被替换的标记
+        import re
+        policy_analysis = re.sub(r"\[TAG_\d+\]", "", policy_analysis)
+        
+        # 去除重复的来源链接
+        processed_lines = []
+        seen_urls = set()
+        
+        for line in policy_analysis.split('\n'):
+            if line.startswith('来源：'):
+                url = line[3:].strip()
+                if url in seen_urls:
+                    continue
+                seen_urls.add(url)
+            processed_lines.append(line)
+        
+        policy_analysis = '\n'.join(processed_lines)
+        
+        return f"## 行业发展指南\n\n{policy_analysis}\n\n"
     except Exception as e:
-        print(f"生成政策分析时出错: {str(e)}")
-        # 失败时添加基本内容
-        basic_content = "\n\n".join([f"- {item.get('title', '无标题')}" for item in policy_news])
-        return f"## 政策与监管动态\n\n{basic_content}\n\n"
+        print(f"整理文件信息时出错: {str(e)}")
+        # 最简单的回退机制，仅列出标题
+        basic_content = ""
+        for item in final_policies:
+            title = item.get('title', '无标题')
+            date_str = ""
+            if 'published_date' in item and isinstance(item['published_date'], datetime):
+                date_str = f" ({item['published_date'].strftime('%Y年%m月%d日')})"
+            basic_content += f"- {title}{date_str}\n"
+        return f"## 行业发展指南\n\n{basic_content}\n\n"
 
 def generate_comprehensive_trend_summary(llm_processor, topic, all_news_data):
     """生成更为全面的趋势总结章节"""
@@ -389,21 +738,42 @@ def generate_comprehensive_trend_summary(llm_processor, topic, all_news_data):
     if len(all_relevant_news) < 3:
         return f"## 行业趋势总结\n\n目前收集到的{topic}行业数据不足，无法生成全面的趋势总结。\n\n"
     
-    # 提取最关键的新闻信息，区分趋势新闻和其他新闻
-    key_trend_news = "\n\n".join([
-        f"标题: {item.get('title', '无标题')}\n内容: {item.get('content', '无内容')[:300]}...\n来源: {item.get('source', '未知')}\n类型: 趋势新闻"
-        for item in trend_news[:10]  # 最多使用10条趋势新闻
-    ])
+    # 准备新闻内容，包含来源信息
+    prepared_news = []
+    for item in all_relevant_news[:20]:  # 限制使用的新闻数量
+        title = item.get('title', '无标题')
+        content = item.get('content', '无内容')[:300]
+        source = item.get('source', '未知来源')
+        news_type = item.get('news_type', '其他新闻')
+        
+        # 将来源直接添加到内容中
+        prepared_item = {
+            "title": title,
+            "content": content,
+            "source": source,
+            "original_source": source,  # 保存原始来源
+            "type": "趋势新闻" if item in trend_news else news_type
+        }
+        prepared_news.append(prepared_item)
     
-    key_other_news = "\n\n".join([
-        f"标题: {item.get('title', '无标题')}\n内容: {item.get('content', '无内容')[:300]}...\n来源: {item.get('source', '未知')}\n类型: {item.get('news_type', '其他新闻')}"
-        for item in other_news[:10]  # 最多使用10条其他新闻作为补充
-    ])
+    # 提取最关键的新闻信息，区分趋势新闻和其他新闻
+    key_trend_news = [item for item in prepared_news if item["type"] == "趋势新闻"]
+    key_other_news = [item for item in prepared_news if item["type"] != "趋势新闻"]
     
     # 组合新闻内容
-    news_content = key_trend_news
-    if key_other_news:
-        news_content += "\n\n=== 其他补充新闻 ===\n\n" + key_other_news
+    trend_text = "\n\n".join([
+        f"标题: {item['title']}\n内容: {item['content']}...\n来源: {item['source']}\n类型: {item['type']}"
+        for item in key_trend_news
+    ])
+    
+    other_text = "\n\n".join([
+        f"标题: {item['title']}\n内容: {item['content']}...\n来源: {item['source']}\n类型: {item['type']}"
+        for item in key_other_news
+    ])
+    
+    news_content = trend_text
+    if other_text:
+        news_content += "\n\n=== 其他补充新闻 ===\n\n" + other_text
     
     summary_prompt = f"""
     请基于以下关于{topic}行业的新闻信息，撰写一份详尽的"行业趋势总结"章节，对整个行业做全面分析。
@@ -414,13 +784,13 @@ def generate_comprehensive_trend_summary(llm_processor, topic, all_news_data):
     
     1. 开篇概述：简明扼要地概括{topic}行业的当前状态和总体发展趋势
     
-    2. 分点详析：使用以下4-6个方面作为小标题，对每个方面进行深入剖析（每点至少200字）：
-       - 市场格局变化：详细分析行业中的市场结构、主要玩家和竞争态势的变化
-       - 技术创新趋势：详细分析推动行业发展的关键技术及其应用前景
-       - 用户需求演变：详细分析客户/消费者行为和需求的变化及其影响
-       - 商业模式创新：详细分析新兴的商业模式和盈利方式
-       - 跨界融合发展：详细分析该行业与其他领域的融合创新趋势
-       - 政策影响分析：详细分析监管环境变化及其影响
+    2. 分点详析：使用以下4-6个方面作为小标题，对每个方面进行深入剖析（每点至少150字）：
+       - **市场格局变化**：详细分析行业中的市场结构、主要玩家和竞争态势的变化
+       - **技术创新趋势**：详细分析推动行业发展的关键技术及其应用前景
+       - **用户需求演变**：详细分析客户/消费者行为和需求的变化及其影响
+       - **商业模式创新**：详细分析新兴的商业模式和盈利方式
+       - **跨界融合发展**：详细分析该行业与其他领域的融合创新趋势
+       - **政策影响分析**：详细分析监管环境变化及其影响
        
     3. 结论展望：对行业未来3-5年的发展做出有见地的预测，包括：
        - 潜在的增长点和机遇
@@ -432,9 +802,13 @@ def generate_comprehensive_trend_summary(llm_processor, topic, all_news_data):
     - 优先关注趋势新闻中反映的行业发展趋势
     - 每个小标题下的内容必须详尽，不能简单列点
     - 使用专业术语，但确保非专业人士也能理解
-    - 引用具体事实、数据或案例支持你的分析
+    - 引用具体事实、数据或案例支持你的观点
     - 突出行业发展的关键拐点和重大变革
-    - 总体篇幅不少于1800字，确保内容充实且有深度
+    - 在每个主要观点或数据引用后，单独一行添加来源链接，格式为"来源：https://example.com"
+    - 确保对不同观点或数据的来源都做清晰标注
+    - 每段内容最多引用一个来源，避免在一段中引用多个来源
+    - 一个来源在一个大段落最多引用一次，不要重复引用相同的来源
+    - 小标题必须使用Markdown加粗格式，如**标题**
     """
     
     summary_system = f"""你是{topic}行业的顶级分析师，拥有15年以上行业经验，对行业发展有深刻理解和独特洞见。
@@ -444,7 +818,16 @@ def generate_comprehensive_trend_summary(llm_processor, topic, all_news_data):
     
     try:
         trend_summary = llm_processor.call_llm_api(summary_prompt, summary_system)
-        return f"## 行业趋势总结\n\n{trend_summary}\n\n"
+        
+        # 确保每个来源都正确显示
+        for item in prepared_news[:10]:  # 检查主要来源
+            original_source = item["original_source"]
+            # 检查是否已包含该来源
+            if f"（{original_source}）" not in trend_summary and f"({original_source})" not in trend_summary:
+                # 如果没有包含，可以考虑添加一个注释
+                print(f"警告：'{original_source}'来源可能未在趋势总结中正确引用")
+        
+        return f"## 行业趋势总结\n\n{trend_summary}\n"
     except Exception as e:
         print(f"生成行业趋势总结时出错: {str(e)}")
         fallback_summary = "无法生成详细的行业趋势总结，请查看报告其他部分获取相关信息。"

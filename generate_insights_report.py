@@ -151,6 +151,15 @@ def generate_insights_report(topic, subtopics=None, output_file=None):
     for section in insights_data.get("sections", []):
         section_title = section.get("title", "未知部分")
         section_content = section.get("content", "无内容")
+        
+        # 检查段落是否已经包含链接引用
+        if "链接：" not in section_content and "来源：" not in section_content:
+            # 获取section关联的来源URL
+            section_url = section.get("url", "")
+            if section_url and section_url != "#":
+                # 在内容末尾添加来源链接（单独一行），与news报告保持一致的格式
+                section_content += f"\n链接：{section_url}"
+        
         content += f"## {section_title}\n\n{section_content}\n\n"
     
     # 添加参考资料

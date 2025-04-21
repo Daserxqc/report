@@ -381,9 +381,46 @@ def get_research_data(topic, subtopics=None, days=7):
         for item in research_items
     ])
     
+    # 增加翻译论文标题的函数
+    def translate_title_if_needed(title, llm_processor):
+        """如果标题是英文，翻译成中文"""
+        if not title:
+            return "无标题"
+        
+        # 检查标题是否包含英文（简单检测方法，可以根据需要改进）
+        if any(ord(c) < 128 for c in title) and not any('\u4e00' <= c <= '\u9fff' for c in title):
+            try:
+                print(f"翻译论文标题: {title}")
+                translated_title = llm_processor.call_llm_api(
+                    f"请将以下学术论文标题翻译成中文，保持学术准确性：\n\n{title}", 
+                    "你是一位精通中英文学术术语的专业翻译，请准确翻译以下学术论文标题，保留专业术语的精确性。只返回翻译结果，不要添加任何解释。"
+                )
+                # 清理可能的引号和空格
+                translated_title = translated_title.strip().strip('"\'')
+                print(f"翻译结果: {translated_title}")
+                return translated_title
+            except Exception as e:
+                print(f"翻译标题时出错: {str(e)}")
+                return title
+        return title
+    
+    # 翻译所有论文标题
+    if llm_processor:
+        for item in research_items:
+            item['chinese_title'] = translate_title_if_needed(item['title'], llm_processor)
+    else:
+        for item in research_items:
+            item['chinese_title'] = item['title']
+            
+    # 使用翻译后的标题更新研究文本
+    research_text = "\n\n".join([
+        f"标题: {item['chinese_title']}\n原始标题: {item['title']}\n摘要: {item['summary']}\n作者: {', '.join(item['authors'])}\n发布日期: {item['published']}\n来源: {item['source']}"
+        for item in research_items
+    ])
+    
     # 识别研究方向
     directions_prompt = f"""
-    请分析以下{topic}领域的研究文章，识别出3-5个主要研究方向或子领域，并为每个方向提供简短描述。
+    请分析以下{topic}领域的研究文章，识别出3-5个主要研究方向或子领域，并为每个方向提供详细描述。
     
     {research_text}
     
@@ -394,9 +431,14 @@ def get_research_data(topic, subtopics=None, days=7):
     4. 考虑方向的重要性、创新性和未来发展潜力
     
     输出要求:
-    1. 明确列出3-5个主要研究方向
-    2. 每个方向提供2-3句话描述其核心关注点和重要性
-    3. 按研究活跃度或前沿程度排序
+    1. 明确列出3-5个主要研究方向，每个方向使用"#. 方向名称"的格式作为标题，使用中文命名
+    2. 每个方向应提供以下内容:
+       - **核心关注点**: 简述该方向的核心技术和研究问题
+       - **重要性**: 解释该方向对领域发展的重要意义
+       - **支持论文**: 列出1-3篇支持该方向的关键论文，使用中文标题
+    3. 每个完整的研究方向(包括所有子内容)结束后，在新行添加且仅添加一个来源链接，格式为"来源: 论文URL"
+    4. 整个研究方向只使用一个最能代表该方向的来源，而不是为方向内的每个子段落添加来源
+    5. 按研究活跃度或前沿程度排序
     """
     
     directions_system = f"""你是一位专业的{topic}领域研究专家，擅长分析和总结研究趋势。
@@ -406,7 +448,13 @@ def get_research_data(topic, subtopics=None, days=7):
 1. 只关注真正属于{topic}核心领域的研究，忽略只是应用或浅层提及的内容
 2. 区分主要研究方向与边缘应用场景
 3. 确保识别的方向有足够的科研支持，不是个别论文的偶然主题
-4. 确保方向之间有足够的差异性，避免重复"""
+4. 确保方向之间有足够的差异性，避免重复
+5. 每个完整的研究方向只添加一个来源引用，这个来源应该放在整个方向描述结束后
+6. 来源链接必须单独成行，格式为"来源: URL"
+7. 不要为方向内的各个子段落分别添加来源，只在整个方向的最后添加一个最有代表性的来源
+8. 使用Markdown格式，确保方向标题使用适当的标题级别
+9. 所有标题和内容均使用中文表述，不要使用英文标题或名称
+10. 使用论文的中文标题，不要使用原始英文标题"""
     
     try:
         research_directions = llm_processor.call_llm_api(directions_prompt, directions_system)
@@ -449,7 +497,8 @@ def get_research_data(topic, subtopics=None, days=7):
                 analysis_prompt = f"""
                 请对以下{topic}领域的学术论文进行深度分析，突出其创新点、方法论和潜在影响。
                 
-                标题: {item['title']}
+                原始标题: {item['title']}
+                中文标题: {item.get('chinese_title', item['title'])}
                 作者: {', '.join(item['authors'])}
                 摘要: {item['summary']}
                 来源: {item['source']}
@@ -463,14 +512,16 @@ def get_research_data(topic, subtopics=None, days=7):
                 4. 讨论研究结果对{topic}领域发展的意义和潜在影响
                 5. 使用专业、客观的语言
                 6. 长度控制在300-500字
+                7. 所有内容使用中文表述
                 """
                 
-                analysis_system = f"你是一位{topic}领域的资深研究员，擅长分析和评价最新的学术论文。请提供专业、深入且中肯的分析。"
+                analysis_system = f"你是一位{topic}领域的资深研究员，擅长分析和评价最新的学术论文。请提供专业、深入且中肯的分析。所有输出必须使用中文。"
             else:
                 analysis_prompt = f"""
                 请对以下{topic}领域的研究见解进行分析和评估，提取关键信息并讨论其在领域中的意义。
                 
-                标题: {item['title']}
+                原始标题: {item['title']}
+                中文标题: {item.get('chinese_title', item['title'])}
                 内容概要: {item['summary']}
                 来源: {item['source']}
                 
@@ -480,9 +531,10 @@ def get_research_data(topic, subtopics=None, days=7):
                 3. 讨论这些见解与当前{topic}领域发展的关系
                 4. 使用专业、客观的语言
                 5. 长度控制在250-400字
+                6. 所有内容使用中文表述
                 """
                 
-                analysis_system = f"你是一位{topic}领域的专业分析师，擅长从各种来源中提取有价值的研究见解并进行专业评估。"
+                analysis_system = f"你是一位{topic}领域的专业分析师，擅长从各种来源中提取有价值的研究见解并进行专业评估。所有输出必须使用中文。"
             
             analysis = llm_processor.call_llm_api(analysis_prompt, analysis_system)
             
@@ -525,11 +577,22 @@ def get_research_data(topic, subtopics=None, days=7):
     - 使用专业、客观的语言
     - 有理有据，避免无根据的猜测
     - 长度控制在700-900字
+    - 将内容划分为3-4个明确的主题段落，每个段落围绕一个核心趋势或预测
+    - 每个主题段落结束后，另起一行添加一个来源链接，格式为"来源: URL"
+    - 每个主题段落只添加一个最能支持该观点的来源链接
+    - 确保引用的链接来自提供的研究文章，不要使用虚构的链接
     """
     
     future_system = f"""你是一位权威的{topic}领域趋势分析专家，擅长分析研究动态并预测未来发展。
 请基于最新文献提供深入的趋势分析，专注于该领域的核心发展方向，而非应用场景。
-区分{topic}领域自身的发展趋势与其在其他领域的应用趋势。"""
+区分{topic}领域自身的发展趋势与其在其他领域的应用趋势。
+链接引用要求:
+1. 将内容组织为3-4个明确的主题段落，每个段落讨论一个核心趋势
+2. 每个主题段落结束后另起一行添加来源
+3. 每个主题段落只引用一个最相关的来源
+4. 来源格式必须是"来源: URL"
+5. 不要在段落中间添加来源引用
+6. 不要为同一主题段落内的子段落分别添加来源"""
     
     try:
         future_outlook = llm_processor.call_llm_api(future_prompt, future_system)
@@ -557,7 +620,11 @@ def get_research_data(topic, subtopics=None, days=7):
 """
     
     # 6. 添加参考资料
-    sources = [{"title": item['title'], "url": item['url'], "authors": item['authors'], "source": item['source']} for item in research_items]
+    sources = [{"title": item['title'],  # 使用原始标题
+                "chinese_title": item.get('chinese_title', item['title']),
+                "url": item['url'], 
+                "authors": item['authors'], 
+                "source": item['source']} for item in research_items]
     
     if sources:
         reference_section = "\n\n## 参考资料\n\n"
