@@ -14,17 +14,17 @@ DEEPSEEK_API_URL = os.getenv("DEEPSEEK_API_URL")
 IEEE_API_KEY = os.getenv("IEEE_API_KEY")
 
 # ArXiv settings
-ARXIV_MAX_RESULTS = 30
+ARXIV_MAX_RESULTS = 50
 ARXIV_SORT_BY = "submittedDate"
 ARXIV_SORT_ORDER = "descending"
 
 # 学术论文搜索设置
 ACADEMIC_SEARCH_ENABLED = True  # 是否启用其他学术源搜索
 ACADEMIC_MIN_PAPERS = 5         # 最少需要的学术论文数量
-ACADEMIC_MAX_PAPERS = 30        # 最多收集的学术论文数量
+ACADEMIC_MAX_PAPERS = 50        # 最多收集的学术论文数量
 
 # News API settings
-NEWS_MAX_RESULTS = 30
+NEWS_MAX_RESULTS = 40
 NEWS_LANGUAGE = "zh"
 NEWS_COUNTRY = "cn"
 NEWS_SORT_BY = "publishedAt"
@@ -51,11 +51,11 @@ DEFAULT_RSS_FEEDS = [
 ]
 
 # Tavily search settings
-TAVILY_MAX_RESULTS = 10
+TAVILY_MAX_RESULTS = 15
 TAVILY_SEARCH_DEPTH = "advanced"
 
 # Report settings
-MAX_ARTICLES_PER_CATEGORY = 5
+MAX_ARTICLES_PER_CATEGORY = 8
 REPORT_TITLE_FORMAT = "{topic} Industry Trends Report ({date})"
 OUTPUT_DIR = "reports"
 
@@ -77,4 +77,4 @@ TEMPERATURE = 0.3
 # CORE API settings
 CORE_API_KEY = os.getenv("CORE_API_KEY")
 CORE_API_URL = "https://api.core.ac.uk/v3"
-CORE_MAX_RESULTS = 20 
+CORE_MAX_RESULTS = 40 

@@ -182,10 +182,10 @@ def get_research_data(topic, subtopics=None, days=7):
             print("从其他学术数据源获取补充论文...")
             academic_collector = AcademicCollector()
             
-            # 尝试从IEEE获取论文
-            ieee_articles = academic_collector.search_ieee(topic, days)
-            print(f"从IEEE Xplore找到 {len(ieee_articles)} 篇论文")
-            additional_articles.extend(ieee_articles)
+            # # 尝试从IEEE获取论文
+            # ieee_articles = academic_collector.search_ieee(topic, days)
+            # print(f"从IEEE Xplore找到 {len(ieee_articles)} 篇论文")
+            # additional_articles.extend(ieee_articles)
             
             # 尝试从CrossRef获取论文
             crossref_articles = academic_collector.search_crossref(topic, days)
@@ -395,8 +395,17 @@ def get_research_data(topic, subtopics=None, days=7):
     
     输出要求:
     1. 明确列出3-5个主要研究方向
-    2. 每个方向提供2-3句话描述其核心关注点和重要性
+    2. 每个方向提供3-5句话描述其核心关注点和重要性
     3. 按研究活跃度或前沿程度排序
+    4. 对所有研究方向的来源进行标注，提供来源的链接
+    5. 采用统一的markdown格式输出:
+       - 研究方向名称使用**加粗**文本
+       - 使用有序列表(1., 2., 3.)标注每个方向
+       - 每个研究方向的子项使用无序列表(• 或-)
+       - 对重要概念进行适当强调
+       - 在每个研究方向之间添加两行以上空行，确保足够的间距
+       - 在要点描述之间也添加适当空行
+    6. 必须使用中文输出所有内容，包括研究方向名称也应翻译成中文（可附英文原名）
     """
     
     directions_system = f"""你是一位专业的{topic}领域研究专家，擅长分析和总结研究趋势。
@@ -406,7 +415,14 @@ def get_research_data(topic, subtopics=None, days=7):
 1. 只关注真正属于{topic}核心领域的研究，忽略只是应用或浅层提及的内容
 2. 区分主要研究方向与边缘应用场景
 3. 确保识别的方向有足够的科研支持，不是个别论文的偶然主题
-4. 确保方向之间有足够的差异性，避免重复"""
+4. 确保方向之间有足够的差异性，避免重复
+5. 遵循统一的格式规范:
+   - 每个研究方向使用编号和**加粗标题**
+   - 关键点使用• 或-列表呈现
+   - 保持一致的格式和结构
+   - 确保足够的空行和间距，使内容易于阅读
+   - 在每个要点后添加空行
+6. 所有输出内容必须使用中文，如有必要可在中文名称后附上英文原名"""
     
     try:
         research_directions = llm_processor.call_llm_api(directions_prompt, directions_system)
@@ -463,9 +479,24 @@ def get_research_data(topic, subtopics=None, days=7):
                 4. 讨论研究结果对{topic}领域发展的意义和潜在影响
                 5. 使用专业、客观的语言
                 6. 长度控制在300-500字
+                
+                格式要求:
+                1. 使用以下统一的章节结构:
+                   - 先用1-2段简要介绍论文的主要内容和领域相关性
+                   - 然后使用"**核心创新点**"作为小标题，列出2-3个要点，每个要点用• 或-列表标记
+                   - 使用"**方法论评估**"作为小标题，分析方法的优势
+                   - 使用"**领域影响**"作为小标题，总结影响
+                2. 关键术语、方法名称、重要数据请使用加粗或斜体标注
+                3. 保持整体格式的一致性
+                4. 必须使用中文输出除标题外的所有内容，技术术语可在中文后附上英文原名
+                5. 增加适当空行和间距:
+                   - 段落之间空一行
+                   - 小标题前空一行
+                   - 列表项之间适当留白
+                   - 不同章节之间有明确分隔
                 """
                 
-                analysis_system = f"你是一位{topic}领域的资深研究员，擅长分析和评价最新的学术论文。请提供专业、深入且中肯的分析。"
+                analysis_system = f"你是一位{topic}领域的资深研究员，擅长分析和评价最新的学术论文。请提供专业、深入且中肯的分析，并严格遵循格式要求，保持一致的结构和样式。所有输出必须使用中文。注重排版的清晰和美观，保持足够的空间和间距。"
             else:
                 analysis_prompt = f"""
                 请对以下{topic}领域的研究见解进行分析和评估，提取关键信息并讨论其在领域中的意义。
@@ -480,9 +511,24 @@ def get_research_data(topic, subtopics=None, days=7):
                 3. 讨论这些见解与当前{topic}领域发展的关系
                 4. 使用专业、客观的语言
                 5. 长度控制在250-400字
+                
+                格式要求:
+                1. 使用以下统一的章节结构:
+                   - 先用1-2段简要介绍文章的主要内容和领域相关性
+                   - 然后使用"**核心见解**"作为小标题，列出2-3个要点，每个要点用• 或-列表标记
+                   - 使用"**价值评估**"作为小标题，分析内容的价值
+                   - 使用"**领域影响**"作为小标题，总结影响
+                2. 关键术语、方法名称、重要数据请使用加粗或斜体标注
+                3. 保持整体格式的一致性
+                4. 必须使用中文输出除标题外的所有内容，技术术语可在中文后附上英文原名
+                5. 增加适当空行和间距:
+                   - 段落之间空一行
+                   - 小标题前空一行
+                   - 列表项之间适当留白
+                   - 不同章节之间有明确分隔
                 """
                 
-                analysis_system = f"你是一位{topic}领域的专业分析师，擅长从各种来源中提取有价值的研究见解并进行专业评估。"
+                analysis_system = f"你是一位{topic}领域的专业分析师，擅长从各种来源中提取有价值的研究见解并进行专业评估。请严格遵循格式要求，保持一致的结构和样式。所有输出必须使用中文。注重排版的清晰和美观，保持足够的空间和间距。"
             
             analysis = llm_processor.call_llm_api(analysis_prompt, analysis_system)
             
@@ -525,11 +571,16 @@ def get_research_data(topic, subtopics=None, days=7):
     - 使用专业、客观的语言
     - 有理有据，避免无根据的猜测
     - 长度控制在700-900字
+    - 必须使用中文输出除标题外的所有内容，技术术语可在中文后附上英文原名
+    - 使用清晰的段落划分，每个观点之间空一行
+    - 重要观点可以使用**加粗**或*斜体*强调
+    - 分点表述时使用编号或项目符号，并保持一致的格式
     """
     
     future_system = f"""你是一位权威的{topic}领域趋势分析专家，擅长分析研究动态并预测未来发展。
 请基于最新文献提供深入的趋势分析，专注于该领域的核心发展方向，而非应用场景。
-区分{topic}领域自身的发展趋势与其在其他领域的应用趋势。"""
+区分{topic}领域自身的发展趋势与其在其他领域的应用趋势。
+注重排版的清晰和美观，保持适当的空行和间距，使内容更易于阅读。"""
     
     try:
         future_outlook = llm_processor.call_llm_api(future_prompt, future_system)
@@ -556,22 +607,38 @@ def get_research_data(topic, subtopics=None, days=7):
 {'\n\n'.join(article_analyses)}
 """
     
-    # 6. 添加参考资料
+    # 6. 添加参考资料 - 修改这部分来包含所有被引用的资料
     sources = [{"title": item['title'], "url": item['url'], "authors": item['authors'], "source": item['source']} for item in research_items]
     
     if sources:
         reference_section = "\n\n## 参考资料\n\n"
         
+        # 收集所有独特的来源，确保没有重复
+        unique_sources = {}
+        for source in sources:
+            if source["url"] not in unique_sources:
+                unique_sources[source["url"]] = source
+        
         # 分别列出学术论文和研究见解
-        if academic_papers:
+        academic_sources = [s for s in unique_sources.values() if s["source"] in ["arxiv", "IEEE Xplore", "CrossRef", "CORE"] or 
+                          "arxiv" in s["source"].lower() or 
+                          "ieee" in s["source"].lower() or 
+                          "crossref" in s["source"].lower() or 
+                          "core" in s["source"].lower()]
+        
+        insight_sources = [s for s in unique_sources.values() if s not in academic_sources]
+        
+        # 添加学术论文
+        if academic_sources:
             reference_section += "### 学术论文\n\n"
-            for i, source in enumerate([s for s in sources if s["source"] in ["arxiv", "IEEE Xplore", "CrossRef"] or "arxiv" in s["source"].lower()]):
+            for i, source in enumerate(academic_sources):
                 authors_text = ', '.join(source['authors']) if isinstance(source['authors'], list) else source['authors']
                 reference_section += f"{i+1}. [{source['title']}]({source['url']}) - {authors_text}\n"
                 
-        if insight_articles:
+        # 添加研究见解
+        if insight_sources:
             reference_section += "\n### 研究见解\n\n"
-            for i, source in enumerate([s for s in sources if s["source"] not in ["arxiv", "IEEE Xplore", "CrossRef"] and "arxiv" not in s["source"].lower()]):
+            for i, source in enumerate(insight_sources):
                 reference_section += f"{i+1}. [{source['title']}]({source['url']}) - {source['source']}\n"
                 
         final_content += reference_section
