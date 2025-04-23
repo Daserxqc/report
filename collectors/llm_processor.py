@@ -47,7 +47,7 @@ class LLMProcessor:
         
     @retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, min=2, max=10))
     def call_llm_api(self, prompt: str, system_message: Optional[str] = None, 
-                  temperature: float = 0.3, max_tokens: int = 1500) -> str:
+                  temperature: float = 0.3, max_tokens: int = 8000) -> str:
         """
         调用LLM API进行内容生成
         
@@ -70,6 +70,10 @@ class LLMProcessor:
                 messages.append({"role": "system", "content": system_message})
             messages.append({"role": "user", "content": prompt})
             
+            # 使用较大的max_tokens确保完整输出
+            if max_tokens < 4000:
+                print(f"警告: max_tokens值 {max_tokens} 较小，可能导致输出截断。建议设置更大的值。")
+            
             # 尝试使用OpenAI Python库
             try:
                 from openai import OpenAI
@@ -83,7 +87,11 @@ class LLMProcessor:
                 )
                 
                 if hasattr(response, 'choices') and len(response.choices) > 0:
-                    return response.choices[0].message.content
+                    result = response.choices[0].message.content
+                    # 检查结果是否可能被截断
+                    if result.endswith("...") or (len(result) > 100 and len(result) >= 0.95 * max_tokens):
+                        print(f"警告: 生成的内容可能被截断 (长度:{len(result)})。考虑增加max_tokens值。")
+                    return result
                 else:
                     raise ValueError(f"API返回无效响应: {response}")
                     
@@ -109,7 +117,11 @@ class LLMProcessor:
                 
                 result = response.json()
                 if "choices" in result and len(result["choices"]) > 0:
-                    return result["choices"][0]["message"]["content"]
+                    content = result["choices"][0]["message"]["content"]
+                    # 检查结果是否可能被截断
+                    if content.endswith("...") or (len(content) > 100 and len(content) >= 0.95 * max_tokens):
+                        print(f"警告: 生成的内容可能被截断 (长度:{len(content)})。考虑增加max_tokens值。")
+                    return content
                 else:
                     raise ValueError(f"API返回无效JSON: {result}")
                     
@@ -157,7 +169,7 @@ class LLMProcessor:
 7. 直接给出总结内容，不要添加额外说明"""
 
         try:
-            result = self.call_llm_api(prompt, system_message, temperature=0.2)
+            result = self.call_llm_api(prompt, system_message, temperature=0.2, max_tokens=4000)
             return result.strip()
         except Exception as e:
             print(f"总结内容时出错: {str(e)}")
@@ -228,7 +240,7 @@ class LLMProcessor:
 9. 对重要数据或概念使用加粗格式突出显示"""
 
         try:
-            result = self.call_llm_api(prompt, system_message, temperature=0.4, max_tokens=2000)
+            result = self.call_llm_api(prompt, system_message, temperature=0.4, max_tokens=6000)
             # 清理可能的元说明
             result = re.sub(r'^(以下是|这是|这篇文章是|下面是).*?[:：]', '', result, flags=re.IGNORECASE).strip()
             return result
@@ -377,7 +389,7 @@ class LLMProcessor:
         prompt = f"请将以下文本翻译成{target_language}：\n\n{text}"
         
         try:
-            result = self.call_llm_api(prompt, system_message, temperature=0.1)
+            result = self.call_llm_api(prompt, system_message, temperature=0.1, max_tokens=6000)
             
             # 清理翻译结果中可能的元说明
             patterns = [
@@ -446,18 +458,18 @@ class LLMProcessor:
     
     @retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, min=2, max=10))
     def call_llm_api_json(self, prompt: str, system_message: Optional[str] = None, 
-                       temperature: float = 0.2, max_tokens: int = 1500) -> dict:
+                       temperature: float = 0.2, max_tokens: int = 8000) -> dict:
         """
-        调用LLM API并确保返回有效的JSON格式
+        调用LLM API进行JSON格式的内容生成
         
         Args:
             prompt (str): 用户提示
             system_message (str, optional): 系统消息
-            temperature (float): 温度参数，控制创造性，默认较低以保证格式一致性
+            temperature (float): 温度参数，控制创造性
             max_tokens (int): 最大生成token数
             
         Returns:
-            dict: 解析后的JSON对象
+            dict: 解析后的JSON结果
         """
         # 如果没有提供系统消息，使用默认的JSON格式化指令
         if not system_message:

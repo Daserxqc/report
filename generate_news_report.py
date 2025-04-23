@@ -163,6 +163,20 @@ def process_breaking_news(llm_processor, topic, breaking_news):
     
     try:
         breaking_news_summary = llm_processor.call_llm_api(prompt, system)
+        
+        # 收集这部分使用的新闻来源
+        news_sources = []
+        for item in breaking_news:
+            title = item.get('title', '未知标题')
+            url = item.get('url', '#')
+            source = item.get('source', '未知来源')
+            if url != '#':
+                news_sources.append(f"- [{title}]({url}) - {source}")
+        
+        # 添加来源到摘要末尾
+        if news_sources:
+            breaking_news_summary += "\n\n**来源:**\n" + "\n".join(news_sources)
+            
         return f"## 行业重大事件\n\n{breaking_news_summary}\n\n"
     except Exception as e:
         print(f"生成行业重大事件摘要时出错: {str(e)}")
@@ -201,6 +215,20 @@ def process_innovation_news(llm_processor, topic, innovation_news):
     
     try:
         innovation_summary = llm_processor.call_llm_api(prompt, system)
+        
+        # 收集这部分使用的新闻来源
+        news_sources = []
+        for item in innovation_news:
+            title = item.get('title', '未知标题')
+            url = item.get('url', '#')
+            source = item.get('source', '未知来源')
+            if url != '#':
+                news_sources.append(f"- [{title}]({url}) - {source}")
+        
+        # 添加来源到摘要末尾
+        if news_sources:
+            innovation_summary += "\n\n**来源:**\n" + "\n".join(news_sources)
+            
         return f"## 技术创新与新产品\n\n{innovation_summary}\n\n"
     except Exception as e:
         print(f"生成技术创新摘要时出错: {str(e)}")
@@ -239,6 +267,20 @@ def process_investment_news(llm_processor, topic, investment_news):
     
     try:
         investment_summary = llm_processor.call_llm_api(prompt, system)
+        
+        # 收集这部分使用的新闻来源
+        news_sources = []
+        for item in investment_news:
+            title = item.get('title', '未知标题')
+            url = item.get('url', '#')
+            source = item.get('source', '未知来源')
+            if url != '#':
+                news_sources.append(f"- [{title}]({url}) - {source}")
+        
+        # 添加来源到摘要末尾
+        if news_sources:
+            investment_summary += "\n\n**来源:**\n" + "\n".join(news_sources)
+            
         return f"## 投资与市场动向\n\n{investment_summary}\n\n"
     except Exception as e:
         print(f"生成投资动向摘要时出错: {str(e)}")
@@ -277,7 +319,7 @@ def process_industry_trends(llm_processor, topic, trend_news):
     - 适当引用新闻中的关键信息作为支撑
     - 对各个趋势进行详细展开解释，而不仅是罗列要点
     - 使用小标题组织内容，使分析更有结构
-    - 长度要充分，至少1000-1500字
+    - 长度要充分，约1000-1200字
     """
     
     trend_system = f"""你是一位权威的{topic}行业趋势分析专家，拥有丰富的行业经验和深刻的洞察力。
@@ -288,6 +330,20 @@ def process_industry_trends(llm_processor, topic, trend_news):
     
     try:
         industry_trend = llm_processor.call_llm_api(trend_prompt, trend_system)
+        
+        # 收集这部分使用的新闻来源
+        news_sources = []
+        for item in trend_news:
+            title = item.get('title', '未知标题')
+            url = item.get('url', '#')
+            source = item.get('source', '未知来源')
+            if url != '#':
+                news_sources.append(f"- [{title}]({url}) - {source}")
+        
+        # 添加来源到摘要末尾
+        if news_sources:
+            industry_trend += "\n\n**来源:**\n" + "\n".join(news_sources)
+            
         return f"## 行业趋势深度分析\n\n{industry_trend}\n\n"
     except Exception as e:
         print(f"生成行业趋势分析时出错: {str(e)}")
@@ -322,6 +378,20 @@ def process_company_news(llm_processor, topic, company, news_items):
     
     try:
         summary = llm_processor.call_llm_api(prompt, system_message)
+        
+        # 收集这部分使用的新闻来源
+        news_sources = []
+        for item in news_items:
+            title = item.get('title', '未知标题')
+            url = item.get('url', '#')
+            source = item.get('source', '未知来源')
+            if url != '#':
+                news_sources.append(f"- [{title}]({url}) - {source}")
+        
+        # 添加来源到摘要末尾
+        if news_sources:
+            summary += "\n\n**来源:**\n" + "\n".join(news_sources)
+            
         return f"### {company}\n\n{summary}"
     except Exception as e:
         print(f"为 {company} 生成摘要时出错: {str(e)}")
@@ -330,278 +400,141 @@ def process_company_news(llm_processor, topic, company, news_items):
         return f"### {company}\n\n{basic_content}"
 
 def process_policy_news(llm_processor, topic, policy_news):
-    """处理政策新闻"""
+    """处理政策监管动态"""
     if not policy_news:
-        return f"## 政策与监管动态\n\n目前暂无{topic}领域的政策监管相关新闻。\n\n"
+        return f"## 政策与监管动态\n\n目前暂无{topic}行业的政策相关新闻。\n\n"
     
-    # 提取所有政策新闻的内容
-    policy_text = "\n\n".join([
-        f"标题: {item.get('title', '无标题')}\n内容: {item.get('content', '无内容')}\n来源: {item.get('source', '未知')}"
+    # 提取所有政策新闻的关键信息
+    all_news_text = "\n\n".join([
+        f"标题: {item.get('title', '无标题')}\n内容: {item.get('content', '无内容')[:500]}...\n来源: {item.get('source', '未知')}"
         for item in policy_news
     ])
     
-    policy_prompt = f"""
-    请基于以下{topic}行业的最新政策相关新闻，总结分析当前的政策环境和监管动向。
+    prompt = f"""
+    请基于以下{topic}行业的最新政策和监管信息，提供详细分析。
     
-    {policy_text}
+    {all_news_text}
     
     请提供:
-    1. 主要的政策法规变化和发布
-    2. 政策对{topic}行业发展的影响分析
-    3. 政策背后的监管思路和趋势
-    4. 企业应对这些政策的建议
+    1. 各项政策和监管动态的概述
+    2. 这些政策对{topic}行业的潜在影响
+    3. 企业应如何应对这些政策变化
+    4. 政策趋势判断和未来展望
     
     要求:
-    - 使用专业、客观的语言
-    - 准确理解政策内容和意图
-    - 分析政策对行业不同参与者的影响
-    - 长度控制在600-800字
+    - 专注于政策内容和实质影响
+    - 分析政策背后的意图和导向
+    - 对比国内外政策差异(如有)
+    - 长度控制在800-1000字
     """
     
-    policy_system = f"你是一位{topic}产业政策专家，擅长解读政策文件并分析其对行业的影响。"
+    system = f"你是一位专精于{topic}行业政策分析的专家，擅长分析政策对行业发展的影响。"
     
     try:
-        policy_analysis = llm_processor.call_llm_api(policy_prompt, policy_system)
-        return f"## 政策与监管动态\n\n{policy_analysis}\n\n"
-    except Exception as e:
-        print(f"生成政策分析时出错: {str(e)}")
-        # 失败时添加基本内容
-        basic_content = "\n\n".join([f"- {item.get('title', '无标题')}" for item in policy_news])
-        return f"## 政策与监管动态\n\n{basic_content}\n\n"
-
-def generate_comprehensive_trend_summary(llm_processor, topic, all_news_data):
-    """生成更为全面的趋势总结章节"""
-    print(f"正在为{topic}行业生成全面趋势总结...")
-    
-    # 整合所有类型的新闻以提供全面视角，但优先考虑趋势新闻
-    trend_news = all_news_data.get("trend_news", [])
-    print(f"趋势分析主要基于 {len(trend_news)} 条趋势新闻")
-    
-    # 其他新闻作为补充
-    other_news = []
-    for category in ["breaking_news", "innovation_news", "policy_news", "investment_news"]:
-        other_news.extend(all_news_data.get(category, []))
-    
-    # 组合所有新闻，但确保趋势新闻位于前列
-    all_relevant_news = trend_news + other_news
-    
-    # 如果没有足够的新闻数据，返回简单提示
-    if len(all_relevant_news) < 3:
-        return f"## 行业趋势总结\n\n目前收集到的{topic}行业数据不足，无法生成全面的趋势总结。\n\n"
-    
-    # 提取最关键的新闻信息，区分趋势新闻和其他新闻
-    key_trend_news = "\n\n".join([
-        f"标题: {item.get('title', '无标题')}\n内容: {item.get('content', '无内容')[:300]}...\n来源: {item.get('source', '未知')}\n类型: 趋势新闻"
-        for item in trend_news[:10]  # 最多使用10条趋势新闻
-    ])
-    
-    key_other_news = "\n\n".join([
-        f"标题: {item.get('title', '无标题')}\n内容: {item.get('content', '无内容')[:300]}...\n来源: {item.get('source', '未知')}\n类型: {item.get('news_type', '其他新闻')}"
-        for item in other_news[:10]  # 最多使用10条其他新闻作为补充
-    ])
-    
-    # 组合新闻内容
-    news_content = key_trend_news
-    if key_other_news:
-        news_content += "\n\n=== 其他补充新闻 ===\n\n" + key_other_news
-    
-    summary_prompt = f"""
-    请基于以下关于{topic}行业的新闻信息，撰写一份详尽的"行业趋势总结"章节，对整个行业做全面分析。
-    
-    {news_content}
-    
-    你的行业趋势总结需要：
-    
-    1. 开篇概述：简明扼要地概括{topic}行业的当前状态和总体发展趋势
-    
-    2. 分点详析：使用以下4-6个方面作为小标题，对每个方面进行深入剖析（每点至少200字）：
-       - 市场格局变化：详细分析行业中的市场结构、主要玩家和竞争态势的变化
-       - 技术创新趋势：详细分析推动行业发展的关键技术及其应用前景
-       - 用户需求演变：详细分析客户/消费者行为和需求的变化及其影响
-       - 商业模式创新：详细分析新兴的商业模式和盈利方式
-       - 跨界融合发展：详细分析该行业与其他领域的融合创新趋势
-       - 政策影响分析：详细分析监管环境变化及其影响
-       
-    3. 结论展望：对行业未来3-5年的发展做出有见地的预测，包括：
-       - 潜在的增长点和机遇
-       - 可能面临的挑战和风险
-       - 关键成功因素的转变
-    
-    要求：
-    - 所有分析都必须基于提供的新闻信息，同时结合行业知识做深入解读
-    - 优先关注趋势新闻中反映的行业发展趋势
-    - 每个小标题下的内容必须详尽，不能简单列点
-    - 使用专业术语，但确保非专业人士也能理解
-    - 引用具体事实、数据或案例支持你的分析
-    - 突出行业发展的关键拐点和重大变革
-    - 总体篇幅不少于1800字，确保内容充实且有深度
-    """
-    
-    summary_system = f"""你是{topic}行业的顶级分析师，拥有15年以上行业经验，对行业发展有深刻理解和独特洞见。
-    你的分析被业内广泛引用，因为它们深入、全面且有前瞻性，能准确把握行业趋势并预测行业未来发展方向。
-    在这次任务中，你需要创作一篇高质量的行业趋势总结章节，它将成为一份完整行业报告的核心部分。
-    你的分析需要详尽、有深度、有结构，能够为读者提供真正的价值和决策参考。"""
-    
-    try:
-        trend_summary = llm_processor.call_llm_api(summary_prompt, summary_system)
-        return f"## 行业趋势总结\n\n{trend_summary}\n\n"
-    except Exception as e:
-        print(f"生成行业趋势总结时出错: {str(e)}")
-        fallback_summary = "无法生成详细的行业趋势总结，请查看报告其他部分获取相关信息。"
-        return f"## 行业趋势总结\n\n{fallback_summary}\n\n"
-
-def generate_news_report(topic, companies=None, days=7, output_file=None):
-    """
-    生成行业最新动态报告
-    
-    Args:
-        topic (str): 主题
-        companies (list): 公司列表，可选，如提供则会特别关注这些公司
-        days (int): 天数范围
-        output_file (str): 输出文件名或路径
+        policy_summary = llm_processor.call_llm_api(prompt, system, max_tokens=8000)
         
-    Returns:
-        tuple: (报告文件路径, 报告数据)
-    """
-    # 确保输出目录存在
-    os.makedirs(config.OUTPUT_DIR, exist_ok=True)
-    
-    # 获取并处理新闻数据，使用全面的行业动态收集方法
-    print(f"\n=== 开始收集{topic}行业全面动态 ===")
-    
-    # 初始化数据收集器和LLM处理器
-    tavily_collector = TavilyCollector()
-    llm_processor = tavily_collector._get_llm_processor()
-    
-    # 首先使用直接搜索获取行业新闻数据，不依赖于特定公司
-    # 这将提供更全面的行业视角，而不是仅关注大公司
-    print(f"使用直接搜索方法收集{topic}行业新闻...")
-    all_news_data = tavily_collector.get_industry_news_direct(topic, days)
-    total_news_count = all_news_data.get("total_count", 0)
-    print(f"共收集到 {total_news_count} 条{topic}行业相关新闻")
-    
-    # 如果提供了公司列表，收集这些公司的特定新闻作为补充
-    company_specifics = []
-    if companies and isinstance(companies, list):
-        print(f"\n=== 收集{len(companies)}家公司特定新闻作为补充 ===")
-        # 调整每家公司的新闻数量，确保不会过于偏重大公司
-        max_news_per_company = max(2, 10 // len(companies))
-        
-        for company in companies:
-            company_news = tavily_collector.get_company_news(
-                company, topic, days, max_results=max_news_per_company
-            )
-            if company_news:
-                # 将公司新闻添加到公司特定部分
-                company_specifics.append({
-                    "company": company,
-                    "news": company_news
-                })
-                print(f"找到 {len(company_news)} 条 {company} 相关新闻")
-            else:
-                print(f"未找到 {company} 相关新闻")
-        
-        # 将公司特定新闻添加到总数据中
-        all_news_data["company_news"] = [item for company_data in company_specifics for item in company_data["news"]]
-    
-    print(f"\n=== 收集完成，开始处理报告内容 ===")
-    
-    # 初始化报告内容
-    content = f"# {topic}行业最新动态报告\n\n"
-    date_str = datetime.now().strftime('%Y-%m-%d')
-    content += f"报告日期: {date_str}\n\n"
-    
-    # 1. 首先处理重大新闻部分
-    breaking_news = all_news_data.get("breaking_news", [])
-    print(f"处理 {len(breaking_news)} 条重大新闻...")
-    breaking_news_content = process_breaking_news(llm_processor, topic, breaking_news)
-    content += breaking_news_content
-    
-    # 2. 处理创新新闻部分
-    innovation_news = all_news_data.get("innovation_news", [])
-    print(f"处理 {len(innovation_news)} 条创新新闻...")
-    innovation_news_content = process_innovation_news(llm_processor, topic, innovation_news)
-    content += innovation_news_content
-    
-    # 3. 处理投资新闻部分
-    investment_news = all_news_data.get("investment_news", [])
-    print(f"处理 {len(investment_news)} 条投资新闻...")
-    investment_news_content = process_investment_news(llm_processor, topic, investment_news)
-    content += investment_news_content
-    
-    # 4. 处理政策监管动态
-    policy_news = all_news_data.get("policy_news", [])
-    print(f"处理 {len(policy_news)} 条政策新闻...")
-    policy_content = process_policy_news(llm_processor, topic, policy_news)
-    content += policy_content
-    
-    # 5. 处理行业趋势新闻
-    trend_news = all_news_data.get("trend_news", [])
-    print(f"处理 {len(trend_news)} 条趋势新闻...")
-    trend_content = process_industry_trends(llm_processor, topic, trend_news)
-    content += trend_content
-    
-    # 6. 如果有公司特定新闻，生成公司动态部分
-    if company_specifics:
-        content += "## 重点公司动态\n\n"
-        print(f"处理 {len(company_specifics)} 家公司的特定新闻...")
-        
-        # 为每个有新闻的公司生成小节
-        for company_data in company_specifics:
-            company = company_data["company"]
-            news_items = company_data["news"]
-            
-            if news_items:
-                company_summary = process_company_news(llm_processor, topic, company, news_items)
-                content += company_summary + "\n\n"
-    
-    # 7. 最后生成趋势总结章节（对整个行业的分析）
-    print("生成全面趋势总结...")
-    trend_summary = generate_comprehensive_trend_summary(llm_processor, topic, all_news_data)
-    content += trend_summary
-    
-    # 8. 收集所有参考资料
-    references = []
-    
-    for news_type in ["breaking_news", "innovation_news", "trend_news", "policy_news", "investment_news", "company_news"]:
-        for item in all_news_data.get(news_type, []):
+        # 收集这部分使用的新闻来源
+        news_sources = []
+        for item in policy_news:
             title = item.get('title', '未知标题')
             url = item.get('url', '#')
             source = item.get('source', '未知来源')
             if url != '#':
-                references.append(f"- [{title}]({url}) - {source}")
+                news_sources.append(f"- [{title}]({url}) - {source}")
+        
+        # 添加来源到摘要末尾
+        if news_sources:
+            policy_summary += "\n\n**来源:**\n" + "\n".join(news_sources)
+            
+        return f"## 政策与监管动态\n\n{policy_summary}\n\n"
+    except Exception as e:
+        print(f"生成政策分析摘要时出错: {str(e)}")
+        return f"## 政策与监管动态\n\n暂无{topic}行业政策分析摘要。\n\n"
+
+def generate_comprehensive_trend_summary(llm_processor, topic, all_news_data):
+    """生成简短的行业趋势概况总结"""
     
-    # 去重参考资料
-    unique_references = list(set(references))
+    # 构建一个简短的总结提示
+    prompt = f"""
+    请针对上述已分析的{topic}行业各个方面（重大事件、技术创新、投资动向、政策监管、行业趋势等），
+    提供一个简短的总体概括和趋势总结。不要重复之前的详细内容，只需简明扼要地突出核心观点。
     
-    # 添加参考资料章节
-    content += "\n\n## 参考资料\n\n"
-    content += "\n".join(unique_references)
+    要求:
+    1. 这是对已有内容的概括总结，不需要引入全新信息
+    2. 长度控制在300-400字以内
+    3. 使用简洁、专业的语言
+    4. 突出核心趋势和对企业的建议
+    5. 不需要添加参考来源
+    """
     
-    # 确定输出文件路径
+    system = f"""你是一位{topic}行业资深分析师，现在需要你对一份行业报告的各部分内容做一个简洁的总结概括。
+这个总结应当点明全局趋势，不再重复已有内容的细节，只需提炼核心观点。请保持简短精练。"""
+    
+    try:
+        summary = llm_processor.call_llm_api(prompt, system, max_tokens=2000)
+        return f"## 行业趋势总结\n\n{summary}\n\n"
+    except Exception as e:
+        print(f"生成行业趋势总结时出错: {str(e)}")
+        return f"## 行业趋势总结\n\n{topic}行业正处于快速发展阶段，上述分析反映了当前市场的主要动态和未来发展方向。\n\n"
+
+def generate_news_report(topic, companies=None, days=7, output_file=None):
+    """
+    生成行业新闻报告
+    
+    Args:
+        topic (str): 行业主题
+        companies (list, optional): 重点关注的公司列表
+        days (int): 收集最近几天的新闻
+        output_file (str, optional): 输出文件路径
+        
+    Returns:
+        str: 报告内容
+    """
+    print(f"\n=== 开始生成{topic}行业新闻报告 ===")
+    
+    # 1. 获取行业动态数据
+    report_data = get_industry_news_comprehensive(topic, days, companies)
+    
+    # 2. 获取报告内容
+    report_content = report_data["content"]
+    
+    # 如果未指定输出文件，使用默认路径
     if not output_file:
-        # 如果没有提供输出文件，使用默认命名
+        # 创建日期字符串用于文件名
         date_str = datetime.now().strftime('%Y%m%d')
-        output_file = os.path.join(config.OUTPUT_DIR, f"{topic.replace(' ', '_').lower()}_news_report_{date_str}.md")
-    elif not os.path.isabs(output_file):
-        # 如果提供的是相对路径，确保正确拼接
-        # 检查输出文件所在目录是否存在
-        output_dir = os.path.dirname(output_file)
-        if output_dir:
-            os.makedirs(output_dir, exist_ok=True)
+        # 默认保存到reports目录
+        reports_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "reports")
+        os.makedirs(reports_dir, exist_ok=True)
+        # 生成安全的文件名
+        safe_topic = "".join([c if c.isalnum() or c in [' ', '_', '-'] else '_' for c in topic])
+        safe_topic = safe_topic.replace(' ', '_')
+        # 设置默认文件名
+        output_file = os.path.join(reports_dir, f"{safe_topic}_行业报告_{date_str}.md")
+        print(f"未指定输出路径，将使用默认路径: {output_file}")
     
-    # 写入报告
-    with open(output_file, 'w', encoding='utf-8-sig') as f:
-        f.write(content)
+    # 确保输出目录存在
+    os.makedirs(os.path.dirname(os.path.abspath(output_file)), exist_ok=True)
     
-    print(f"\n=== 行业最新动态报告生成完成 ===")
-    print(f"报告已保存至: {output_file}")
+    # 3. 优化格式 - 在保存前修复Markdown格式
+    try:
+        report_content = fix_markdown_headings(report_content)
+        print("报告格式已优化")
+    except Exception as e:
+        print(f"修复Markdown格式时出错: {str(e)}")
     
-    # 修复报告中的标题问题
-    print("正在优化报告标题格式...")
-    fix_markdown_headings(output_file)
+    # 保存报告内容到文件
+    try:
+        from report_utils import safe_save_report
+        safe_save_report(report_content, output_file)
+    except ImportError:
+        # 如果没有导入成功，使用标准方式保存
+        print("注意：未找到report_utils模块，使用标准方式保存文件")
+        with open(output_file, "w", encoding="utf-8-sig") as f:
+            f.write(report_content)
     
-    return output_file, {"content": content, "data": all_news_data, "date": date_str}
+    print(f"报告已保存到: {output_file}")
+    
+    return report_content
 
 if __name__ == "__main__":
     # 加载环境变量

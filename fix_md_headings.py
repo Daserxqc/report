@@ -44,31 +44,17 @@ def fix_percentage_formatting(content):
     
     return content
 
-def fix_markdown_headings(file_path):
+def fix_markdown_headings_content(content):
     """
-    修复Markdown文件中的重复标题问题
+    修复Markdown内容字符串中的重复标题问题
     
     Args:
-        file_path (str): Markdown文件路径
+        content (str): Markdown内容字符串
         
     Returns:
-        bool: 是否成功修复
+        str: 修复后的内容
     """
     try:
-        # 读取原始文件内容
-        with open(file_path, 'r', encoding='utf-8-sig') as f:
-            content = f.read()
-        
-        # 保存原始内容的备份
-        if isinstance(file_path, Path):
-            backup_path = str(file_path) + '.bak'
-        else:
-            backup_path = file_path + '.bak'
-        with open(backup_path, 'w', encoding='utf-8-sig') as f:
-            f.write(content)
-        
-        print(f"已创建备份文件: {backup_path}")
-        
         # 修复百分比数字周围的双星号问题
         content = fix_percentage_formatting(content)
         
@@ -104,9 +90,49 @@ def fix_markdown_headings(file_path):
                 content = content.replace(full_h2 + "\n\n", "")
                 print(f"已删除复合重复的二级标题: '{h2_title}'")
         
+        return content
+        
+    except Exception as e:
+        print(f"修复内容过程中出错: {str(e)}")
+        import traceback
+        print(traceback.format_exc())
+        return content  # 出错时返回原始内容
+
+def fix_markdown_headings(file_path):
+    """
+    修复Markdown文件中的重复标题问题
+    
+    Args:
+        file_path (str或str): Markdown文件路径或内容字符串
+        
+    Returns:
+        bool或str: 处理文件时返回布尔值表示成功与否，处理字符串时返回修复后的内容
+    """
+    # 如果参数是字符串内容而不是文件路径
+    if isinstance(file_path, str) and ('\n' in file_path or len(file_path) > 200):
+        return fix_markdown_headings_content(file_path)
+        
+    try:
+        # 读取原始文件内容
+        with open(file_path, 'r', encoding='utf-8-sig') as f:
+            content = f.read()
+        
+        # 保存原始内容的备份
+        if isinstance(file_path, Path):
+            backup_path = str(file_path) + '.bak'
+        else:
+            backup_path = file_path + '.bak'
+        with open(backup_path, 'w', encoding='utf-8-sig') as f:
+            f.write(content)
+        
+        print(f"已创建备份文件: {backup_path}")
+        
+        # 使用内容处理函数修复内容
+        fixed_content = fix_markdown_headings_content(content)
+        
         # 保存修复后的内容
         with open(file_path, 'w', encoding='utf-8-sig') as f:
-            f.write(content)
+            f.write(fixed_content)
         
         print(f"文件修复完成: {file_path}")
         return True

@@ -75,9 +75,14 @@ def safe_save_report(report_content, filename):
         
         # 验证内容中的中文字符
         chinese_count = sum(1 for c in report_content if '\u4e00' <= c <= '\u9fff')
-        print(f"报告包含 {chinese_count} 个中文字符")
+        print(f"报告包含 {chinese_count} 个中文字符, 总长度: {len(report_content)} 字符")
         
-        # 确保使用UTF-8-SIG (带BOM标记)编码保存
+        # 确保内容没有被意外截断
+        if report_content.endswith("...") and len(report_content) > 100:
+            # 检查是否因为截断而导致的省略号
+            print("警告: 报告内容可能被截断，请检查生成过程")
+        
+        # 确保使用UTF-8-SIG (带BOM标记)编码保存，适用于中文内容
         with open(filename, "w", encoding="utf-8-sig") as f:
             f.write(report_content)
         print(f"报告已保存: {filename} ({os.path.getsize(filename)} 字节)")
@@ -86,7 +91,10 @@ def safe_save_report(report_content, filename):
         with open(filename, "r", encoding="utf-8-sig") as f:
             content = f.read()
             read_chinese = sum(1 for c in content if '\u4e00' <= c <= '\u9fff')
-            print(f"验证成功: 写入{chinese_count}个中文字符，读取到{read_chinese}个中文字符")
+            if read_chinese != chinese_count:
+                print(f"警告: 写入与读取的中文字符数不匹配! 写入:{chinese_count}, 读取:{read_chinese}")
+            else:
+                print(f"验证成功: 写入{chinese_count}个中文字符，读取到{read_chinese}个中文字符")
             
         return True
     except Exception as e:
