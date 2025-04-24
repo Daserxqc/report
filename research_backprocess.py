@@ -133,9 +133,40 @@ def process_markdown_file(file_path):
     # Update content with new references
     if new_refs:
         if ref_section:
-            # Replace old reference section with updated one
-            updated_ref_section = ref_section + "\n" + "\n".join(new_refs)
-            updated_content = content.replace(ref_section, updated_ref_section)
+            # Find where the reference section starts in the content
+            ref_start = content.find(ref_section)
+            if ref_start != -1:
+                # Remove the old reference section and add a completely new one with all references
+                content_without_refs = content[:ref_start]
+                
+                # Rebuild reference section with existing and new references
+                all_refs = []
+                # Add existing references
+                for i, (_, title, url) in enumerate(existing_refs):
+                    author = ""  # Extract author if available in the existing reference
+                    ref_text = f"{i+1}. [{title}]({url})"
+                    if " - " in ref_text:
+                        ref_parts = ref_text.split(" - ", 1)
+                        ref_text = ref_parts[0]
+                        author = ref_parts[1]
+                    all_refs.append(create_new_reference(i+1, title, url, author))
+                
+                # Add new references
+                for i, new_ref in enumerate(new_refs):
+                    ref_num = len(existing_refs) + i + 1
+                    # Extract reference info to standardize format
+                    ref_match = re.match(r'\d+\.\s+\[([^\]]+)\]\(([^)]+)\)(.*)', new_ref)
+                    if ref_match:
+                        title, url, author_part = ref_match.groups()
+                        all_refs.append(create_new_reference(ref_num, title, url, author_part.strip(" -")))
+                
+                # Create updated content with new reference section
+                ref_header = "参考资料" if "参考资料" in ref_section else "References" if "References" in ref_section else "参考文献"
+                updated_ref_section = f"\n\n{ref_header}\n" + "\n".join(all_refs)
+                updated_content = content_without_refs + updated_ref_section
+            else:
+                # Fallback if reference section can't be found for some reason
+                updated_content = content + "\n\n参考资料\n" + "\n".join(new_refs)
         else:
             # Create new reference section
             new_ref_section = "\n\n参考资料\n" + "\n".join(new_refs)
