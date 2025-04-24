@@ -406,6 +406,7 @@ def get_research_data(topic, subtopics=None, days=7):
        - 在每个研究方向之间添加两行以上空行，确保足够的间距
        - 在要点描述之间也添加适当空行
     6. 必须使用中文输出所有内容，包括研究方向名称也应翻译成中文（可附英文原名）
+    7. 对每个要点或关键发现，必须添加真实的论文来源链接，格式为[链接](真实URL)。必须引用原文提供的真实完整URL，绝不能使用'https://arxiv.org/abs/'这样的不完整URL或虚构URL
     """
     
     directions_system = f"""你是一位专业的{topic}领域研究专家，擅长分析和总结研究趋势。
@@ -422,7 +423,8 @@ def get_research_data(topic, subtopics=None, days=7):
    - 保持一致的格式和结构
    - 确保足够的空行和间距，使内容易于阅读
    - 在每个要点后添加空行
-6. 所有输出内容必须使用中文，如有必要可在中文名称后附上英文原名"""
+6. 所有输出内容必须使用中文，如有必要可在中文名称后附上英文原名
+7. 必须使用提供的研究文章中的真实URL作为引用链接，绝对不要使用虚构的URL或通用URL模板。确保每个URL都是完整且实际存在的链接。"""
     
     try:
         research_directions = llm_processor.call_llm_api(directions_prompt, directions_system)
@@ -575,12 +577,14 @@ def get_research_data(topic, subtopics=None, days=7):
     - 使用清晰的段落划分，每个观点之间空一行
     - 重要观点可以使用**加粗**或*斜体*强调
     - 分点表述时使用编号或项目符号，并保持一致的格式
+    - 必须使用提供的研究文章中的真实完整URL作为引用链接，格式为[链接](真实URL)。绝不能使用不完整URL或虚构URL。
     """
     
     future_system = f"""你是一位权威的{topic}领域趋势分析专家，擅长分析研究动态并预测未来发展。
 请基于最新文献提供深入的趋势分析，专注于该领域的核心发展方向，而非应用场景。
 区分{topic}领域自身的发展趋势与其在其他领域的应用趋势。
-注重排版的清晰和美观，保持适当的空行和间距，使内容更易于阅读。"""
+注重排版的清晰和美观，保持适当的空行和间距，使内容更易于阅读。
+最重要的是：必须使用真实完整的文献URL进行引用，绝不能使用'https://arxiv.org/abs/'这样的不完整URL或虚构URL。每个链接必须直接引用原始文献的实际网址。"""
     
     try:
         future_outlook = llm_processor.call_llm_api(future_prompt, future_system)

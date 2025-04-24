@@ -150,6 +150,25 @@ class ArxivCollector:
                 'categories': result.categories,
                 'source': 'arxiv'
             }
+            
+            # 确保URL是完整的arxiv链接
+            if 'url' in paper_info and paper_info['url']:
+                # 如果是arxiv ID (例如 1234.56789)
+                if not paper_info['url'].startswith('http'):
+                    if '/abs/' in paper_info['url']:
+                        # 提取ID部分
+                        arxiv_id = paper_info['url'].split('/abs/')[-1]
+                        paper_info['url'] = f"https://arxiv.org/abs/{arxiv_id}"
+                    else:
+                        # 直接作为ID使用
+                        paper_info['url'] = f"https://arxiv.org/abs/{paper_info['url']}"
+                # 如果URL不完整 (只有基本部分 https://arxiv.org/abs/)
+                elif paper_info['url'].endswith('/abs/'):
+                    # 从pdf_url提取ID
+                    if paper_info['pdf_url'] and '/pdf/' in paper_info['pdf_url']:
+                        arxiv_id = paper_info['pdf_url'].split('/pdf/')[-1].replace('.pdf', '')
+                        paper_info['url'] = f"https://arxiv.org/abs/{arxiv_id}"
+            
             results.append(paper_info)
             
         print(f"在arXiv上找到 {len(results)} 篇论文")

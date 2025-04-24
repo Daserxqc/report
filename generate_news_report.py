@@ -471,7 +471,7 @@ def generate_comprehensive_trend_summary(llm_processor, topic, all_news_data):
 这个总结应当点明全局趋势，不再重复已有内容的细节，只需提炼核心观点。请保持简短精练。"""
     
     try:
-        summary = llm_processor.call_llm_api(prompt, system, max_tokens=2000)
+        summary = llm_processor.call_llm_api(prompt, system, max_tokens=3000)
         return f"## 行业趋势总结\n\n{summary}\n\n"
     except Exception as e:
         print(f"生成行业趋势总结时出错: {str(e)}")
