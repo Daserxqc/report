@@ -71,7 +71,7 @@ REPORT_SECTIONS = [
 ]
 
 # LLM settings
-MAX_TOKENS = 8000
+MAX_TOKENS = 8192
 TEMPERATURE = 0.3
 
 # CORE API settings

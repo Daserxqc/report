@@ -47,7 +47,7 @@ class LLMProcessor:
         
     @retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, min=2, max=10))
     def call_llm_api(self, prompt: str, system_message: Optional[str] = None, 
-                  temperature: float = 0.3, max_tokens: int = 8000) -> str:
+                  temperature: float = 0.3, max_tokens: int = 8192) -> str:
         """
         调用LLM API进行内容生成
         
@@ -218,13 +218,14 @@ class LLMProcessor:
             
         system_message = f"""你是一位专业的{topic}行业分析师，擅长撰写高质量的行业报告。
 基于提供的材料，请撰写一篇关于{topic}的{section_name}分析。
-内容应专业、客观、有深度，同时注重可读性。
-统计数据和关键事实必须基于提供的材料，不要捏造数据。
+内容应专业、客观、有深度，同时注重可读性和详尽性。
+需要全面覆盖提供材料中的核心观点、统计数据和关键事实。
 使用清晰的标题层次，并确保关键数据突出显示。
 减少括号和术语解释的使用，使文本更加流畅自然。
-如果材料中有冲突的信息，请选择最可信的数据来源或明确指出差异。"""
+如果材料中有冲突的信息，请选择最可信的数据来源或明确指出差异。
+必须生成详细、深入的分析，避免过于简短或笼统的内容。"""
 
-        prompt = f"""请基于以下关于{topic}的{section_name}原始资料，撰写一篇专业、连贯、结构清晰的分析文章：
+        prompt = f"""请基于以下关于{topic}的{section_name}原始资料，撰写一篇专业、连贯、结构清晰且内容详尽的分析文章：
 
 {combined_content}
 
@@ -233,24 +234,26 @@ class LLMProcessor:
 2. 使用专业、客观的语言风格
 3. 文章结构应清晰，分段合理，使用**粗体**标记重要小标题
 4. 使用Markdown格式，保留所有重要数据点和统计数字
-5. 长度适中，约800-1200字
+5. 长度必须充分，应在1500-2500字之间，确保对主题的深入覆盖
 6. 文章应当是完整的，具有内在逻辑和连贯性
 7. 直接给出文章内容，不要添加标题或额外说明
 8. 减少括号的使用，避免过多术语解释，使行文更加自然
-9. 对重要数据或概念使用加粗格式突出显示"""
+9. 对重要数据或概念使用加粗格式突出显示
+10. 包含多个子标题和章节，确保内容的层次性和丰富度
+11. 不要忽略任何重要观点或数据，应全面整合所有提供的资料"""
 
         try:
-            result = self.call_llm_api(prompt, system_message, temperature=0.4, max_tokens=6000)
+            result = self.call_llm_api(prompt, system_message, temperature=0.4, max_tokens=8000)
             # 清理可能的元说明
             result = re.sub(r'^(以下是|这是|这篇文章是|下面是).*?[:：]', '', result, flags=re.IGNORECASE).strip()
             return result
         except Exception as e:
             print(f"生成{section_name}章节内容时出错: {str(e)}")
-            # 失败时尝试简单合并内容
+            # 失败时尝试简单合并内容，但保留更多内容
             fallback_content = f"根据搜集的资料，{topic}的{section_name}主要包括以下几个方面：\n\n"
-            # 提取每个来源的前200个字符作为备用
-            for i, content in enumerate(all_contents[:3]):
-                fallback_content += f"● {content[:200]}...\n\n"
+            # 提取每个来源的前500个字符作为备用（增加长度）
+            for i, content in enumerate(all_contents[:5]):
+                fallback_content += f"● {content[:500]}...\n\n"
             return fallback_content
             
     def organize_search_results(self, raw_results: List[Dict[str, Any]], topic: str) -> Dict[str, Any]:
@@ -337,7 +340,7 @@ class LLMProcessor:
             
             # 添加参考来源
             report_content += "**参考来源**:\n"
-            for idx, item in enumerate(section_items[:3]):
+            for idx, item in enumerate(section_items[:5]):
                 report_content += f"- [{item['title']}]({item['url']})\n"
                 
             report_content += "\n\n"
@@ -458,7 +461,7 @@ class LLMProcessor:
     
     @retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, min=2, max=10))
     def call_llm_api_json(self, prompt: str, system_message: Optional[str] = None, 
-                       temperature: float = 0.2, max_tokens: int = 8000) -> dict:
+                       temperature: float = 0.2, max_tokens: int = 8192) -> dict:
         """
         调用LLM API进行JSON格式的内容生成
         

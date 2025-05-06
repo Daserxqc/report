@@ -169,47 +169,67 @@ def get_raw_industry_data_by_section(topic, section, llm_processor=None):
         llm_processor: LLM处理器实例
         
     Returns:
-        list: 该章节筛选后的高质量数据（3-4条）
+        list: 该章节筛选后的高质量数据（8-15条）
     """
     tavily_collector = TavilyCollector()
     queries = []
     
-    # 根据章节创建具体查询
+    # 根据章节增加更多查询组合
     if "行业定义" in section or "核心特点" in section:
         queries.append({"query": f"{topic} 行业定义 技术特征 核心价值 边界", "section": section})
         queries.append({"query": f"{topic} 技术原理 核心功能 特点", "section": section})
         queries.append({"query": f"{topic} 定义 概念 范围 特点", "section": section})
+        queries.append({"query": f"{topic} 技术架构 基础组件 核心价值主张", "section": section})
+        queries.append({"query": f"{topic} 技术标准 关键特征 区别于传统方法", "section": section})
+        queries.append({"query": f"{topic} 行业解析 核心技术 价值流", "section": section})
     
     elif "发展历程" in section or "阶段演进" in section:
         queries.append({"query": f"{topic} 发展历程 关键阶段 里程碑 技术演进", "section": section})
         queries.append({"query": f"{topic} 历史发展 演进路径 重大突破", "section": section})
         queries.append({"query": f"{topic} 发展史 阶段 关键事件", "section": section})
+        queries.append({"query": f"{topic} 技术迭代 转折点 年表", "section": section})
+        queries.append({"query": f"{topic} 历史沿革 代际变迁 技术演化", "section": section})
+        queries.append({"query": f"{topic} 发展时间线 突破性事件 行业变革", "section": section})
     
     elif "产业链" in section or "价值分布" in section:
         queries.append({"query": f"{topic} 产业链 上游 中游 下游 结构", "section": section})
         queries.append({"query": f"{topic} 价值分布 成本结构 利润分配", "section": section})
         queries.append({"query": f"{topic} 产业生态 供应链 价值链", "section": section})
+        queries.append({"query": f"{topic} 上下游企业 价值占比 核心环节", "section": section})
+        queries.append({"query": f"{topic} 产业结构 利润分布 关键角色", "section": section})
+        queries.append({"query": f"{topic} 产业地图 价值流动 环节分析", "section": section})
     
     elif "市场格局" in section or "参与者" in section:
         queries.append({"query": f"{topic} 市场格局 竞争状况 市场份额 领先企业", "section": section})
         queries.append({"query": f"{topic} 主要参与者 代表性企业 商业模式", "section": section})
         queries.append({"query": f"{topic} 市场竞争 头部企业 排名", "section": section})
+        queries.append({"query": f"{topic} 市场集中度 竞争优势 商业地位", "section": section})
+        queries.append({"query": f"{topic} 细分市场 区域格局 国内外企业对比", "section": section})
+        queries.append({"query": f"{topic} 产业参与者 技术壁垒 竞争策略", "section": section})
     
     elif "核心驱动" in section or "趋势" in section:
         queries.append({"query": f"{topic} 驱动因素 发展趋势 市场需求 技术演进", "section": section})
         queries.append({"query": f"{topic} 趋势预测 技术发展 商业模式变革", "section": section})
         queries.append({"query": f"{topic} 行业趋势 发展方向 演变", "section": section})
+        queries.append({"query": f"{topic} 主要趋势 科技突破 未来技术路线图", "section": section})
+        queries.append({"query": f"{topic} 行业变革 创新驱动 需求动力", "section": section})
+        queries.append({"query": f"{topic} 增长驱动力 新兴技术融合 产业升级", "section": section})
     
     elif "未来展望" in section or "挑战应对" in section:
         queries.append({"query": f"{topic} 未来展望 技术突破 创新机遇", "section": section})
         queries.append({"query": f"{topic} 行业挑战 问题 解决方案 策略", "section": section})
         queries.append({"query": f"{topic} 未来发展 创新 突破 前景", "section": section})
         queries.append({"query": f"{topic} 挑战 困难 应对策略", "section": section})
+        queries.append({"query": f"{topic} 增长空间 机遇窗口 发展瓶颈", "section": section})
+        queries.append({"query": f"{topic} 行业前景 预测分析 战略方向", "section": section})
     
     elif "政策环境" in section:
         queries.append({"query": f"{topic} 政策环境 法规 监管 全球对比", "section": section})
         queries.append({"query": f"{topic} 产业政策 扶持措施 监管趋势 影响", "section": section})
         queries.append({"query": f"{topic} 法律法规 标准 合规要求", "section": section})
+        queries.append({"query": f"{topic} 国家政策 地方支持 监管框架", "section": section})
+        queries.append({"query": f"{topic} 国际政策 国内法规 合规成本", "section": section})
+        queries.append({"query": f"{topic} 政策导向 行业标准 合规体系", "section": section})
     
     # 执行查询并收集结果
     section_results = []
@@ -220,7 +240,7 @@ def get_raw_industry_data_by_section(topic, section, llm_processor=None):
         
         try:
             print(f"正在搜索章节'{section}'的资料: {query}")
-            results = tavily_collector.search(query, max_results=6)  # 增加每个查询的结果数
+            results = tavily_collector.search(query, max_results=10)  # 增加每个查询的结果数量
             
             print(f"查询 '{query}' 返回了 {len(results)} 条结果")
             
@@ -260,24 +280,24 @@ def get_raw_industry_data_by_section(topic, section, llm_processor=None):
         print(f"立即评估章节'{section}'的 {len(section_results)} 条资料相关性...")
         scored_results = evaluate_insights_relevance(section_results, f"{topic} {section}", llm_processor)
         
-        # 保留最相关的3-4条
-        if len(scored_results) > 4:
-            print(f"章节'{section}'从 {len(scored_results)} 条中筛选出最相关的4条")
-            high_quality_results = scored_results[:4]
-        elif len(scored_results) > 2:
+        # 保留最相关的8-15条，大幅增加数量以提供更丰富内容
+        if len(scored_results) > 15:
+            print(f"章节'{section}'从 {len(scored_results)} 条中筛选出最相关的15条")
+            high_quality_results = scored_results[:15]
+        elif len(scored_results) > 8:
             print(f"章节'{section}'从 {len(scored_results)} 条中筛选出最相关的{len(scored_results)}条")
             high_quality_results = scored_results
         else:
-            # 如果结果少于3条，尽量保留所有结果
+            # 如果结果少于8条，尽量保留所有结果
             high_quality_results = scored_results
             
         return high_quality_results
     
     # 如果没有LLM处理器，简单筛选
-    if len(section_results) > 4:
+    if len(section_results) > 10:
         # 基于标题和内容长度的简单筛选
         section_results.sort(key=lambda x: len(x.get("content", "")), reverse=True)
-        return section_results[:4]
+        return section_results[:10]
     
     return section_results
 
@@ -393,7 +413,7 @@ def get_industry_insights(topic, subtopics=None):
 def organize_industry_insights_with_sources(filtered_data, topic, subtopics, llm_processor=None, sections_data=None):
     """
     使用筛选后的数据组织行业洞察报告，并在每个小点下添加来源信息
-    注意：每个章节保留3-4条资料
+    注意：每个章节保留5-8条资料
     
     Args:
         filtered_data (list): 筛选后的高质量数据
@@ -413,6 +433,28 @@ def organize_industry_insights_with_sources(filtered_data, topic, subtopics, llm
             "sources": [],
             "date": datetime.now().strftime('%Y-%m-%d')
         }
+    
+    # 导入行业洞察的标准结构
+    standard_sections = []
+    if subtopics:
+        standard_sections = subtopics
+    else:
+        standard_sections = [
+            "行业定义与核心特点",
+            "发展历程与阶段演进",
+            "产业链与价值分布",
+            "市场格局与参与者", 
+            "核心驱动与趋势",
+            "未来展望与挑战应对",
+            "政策环境分析"
+        ]
+    
+    # 初始化报告内容
+    report_content = f"# {topic}行业洞察\n\n"
+    
+    # 初始化结构化章节数据和来源引用
+    structured_sections = []
+    sources = []
     
     # 如果没有提供sections_data，则重新按章节组织数据
     if not sections_data:
@@ -443,22 +485,6 @@ def organize_industry_insights_with_sources(filtered_data, topic, subtopics, llm
             sections_data[section].append(item)
     
     # 使用LLM处理器生成章节内容
-    structured_sections = []
-    sources = []
-    report_content = f"# {topic}行业洞察报告\n\n"
-    
-    # 定义标准章节顺序
-    standard_sections = [
-        "行业定义与核心特点",
-        "发展历程与阶段演进",
-        "产业链与价值分布",
-        "市场格局与参与者",
-        "核心驱动与趋势",
-        "未来展望与挑战应对",
-        "政策环境分析"
-    ]
-    
-    # 按标准顺序生成章节
     for section_name in standard_sections:
         if section_name in sections_data and sections_data[section_name]:
             # 为每个章节添加二级标题
@@ -474,33 +500,32 @@ def organize_industry_insights_with_sources(filtered_data, topic, subtopics, llm
                 try:
                     # 根据资料数量使用不同处理逻辑
                     if len(section_items) == 1:
-                        # 单条资料处理逻辑
                         item = section_items[0]
                         title = item.get("title", "")
                         content = item.get("content", "").strip()
                         source = item.get("source", "行业分析")
                         url = item.get("url", "#")
                         
-                        prompt = f"""
-                        请基于以下单条资料，为'{topic}行业洞察报告'的'{section_name}'章节生成专业、结构清晰的内容。
+                        # 针对单资料的详细处理提示
+                        prompt = f"""请基于以下关于"{topic}{section_name}"的详细资料，创建一个内容非常丰富、结构清晰的分析报告章节。务必详尽展开，不要简略处理：
 
-                        资料标题: {title}
-                        资料内容: {content[:3500]}...
-                        
-                        要求：
-                        1. 深入分析这条资料，提取关键信息和见解
-                        2. 将内容组织成多个简短的小节，确保结构清晰
-                        3. 使用层级标题组织内容：
-                           - 使用三级标题(###)作为主要分块，至少创建4-6个三级标题
-                           - 在每个三级标题下，使用四级标题(####)进一步细分内容，每个三级标题下至少有2-3个四级标题
-                        4. 控制每个段落的长度在100-250字之间，避免出现过长段落
-                        5. 确保标题简洁明了，能够概括该小节的核心内容
-                        6. 在相关内容后标注来源信息: [数据来源: {source} - {url}]
-                        7. 内容要客观专业，突出核心洞见，总体长度约2000-3000字
-                        8. 每个四级标题下的内容控制在200-300字之间，确保简洁明了
-                        9. 不要出现连续超过10行的无标题文本
-                        10. 对于数据和关键观点，使用项目符号(•)或编号列表呈现，提高可读性
-                        """
+资料标题: {title}
+资料内容: {content}
+
+要求：
+1. 生成一个标题为"# {title}"的markdown格式章节
+2. 分析必须极其深入且详尽，包含至少7-10个有层次的子标题
+3. 每个小节必须有充分展开的内容，确保内容的深度和广度
+4. 使用Markdown格式组织内容，重要观点和数据使用**粗体**标记
+5. 分析长度必须在2500-3500字以上，确保内容极其充实和深入
+6. 保留所有重要数据点和事实，整合到合适的上下文中
+7. 使用多级标题（##、###、####）组织内容，确保结构分明
+8. 对原始内容进行充分扩展和深入挖掘，绝不简单复述
+9. 在文末添加数据来源: {source} - {url}
+10. 内容必须专业、权威且有极高的分析深度，彻底避免浅尝辄止
+11. 每个小节建议包含4-6个段落，确保充分展开论述
+12. 使用简短小标题+详尽内容的组织方式，使内容既有层次又便于阅读
+"""
                     elif len(section_items) == 2:
                         # 两条资料处理逻辑
                         item1 = section_items[0]
@@ -514,33 +539,32 @@ def organize_industry_insights_with_sources(filtered_data, topic, subtopics, llm
                         url1 = item1.get("url", "#")
                         url2 = item2.get("url", "#")
                         
-                        prompt = f"""
-                        请基于以下两条资料，为'{topic}行业洞察报告'的'{section_name}'章节生成专业、结构清晰的内容。
+                        prompt = f"""请基于以下两条资料，为'{topic}行业洞察报告'的'{section_name}'章节生成极其详尽、结构清晰的内容。
 
                         资料1标题: {title1}
-                        资料1内容: {content1[:2000]}...
+                        资料1内容: {content1[:3000]}...
                         
                         资料2标题: {title2}
-                        资料2内容: {content2[:2000]}...
+                        资料2内容: {content2[:3000]}...
                         
                         要求：
-                        1. 深入分析和整合这两条资料，提取关键信息和见解
-                        2. 将内容组织成多个简短的小节，确保结构清晰
+                        1. 深入分析和整合这两条资料，提取所有关键信息和见解
+                        2. 内容必须极其详尽全面，至少包含8-10个主要小节
                         3. 使用层级标题组织内容：
-                           - 使用三级标题(###)作为主要分块，至少创建5-7个三级标题
-                           - 在每个三级标题下，使用四级标题(####)进一步细分内容，每个三级标题下至少有2-3个四级标题
-                        4. 控制每个段落的长度在100-250字之间，避免出现过长段落
+                           - 使用三级标题(###)作为主要分块，至少创建8-10个三级标题
+                           - 在每个三级标题下，使用四级标题(####)进一步细分内容，每个三级标题下至少有3-5个四级标题
+                        4. 每个小节都必须有充分展开的内容，建议每个四级标题下200-400字
                         5. 确保标题简洁明了，能够概括该小节的核心内容
                         6. 在相应内容后标注来源信息: 
                            [数据来源1: {source1} - {url1}]
                            [数据来源2: {source2} - {url2}]
-                        7. 内容要客观专业，突出核心洞见，总体长度约2500-3500字
-                        8. 每个四级标题下的内容控制在200-300字之间，确保简洁明了
-                        9. 不要出现连续超过10行的无标题文本
-                        10. 对于数据和关键观点，使用项目符号(•)或编号列表呈现，提高可读性
+                        7. 内容要绝对详尽，总体长度不少于4000字
+                        8. 对于数据和关键观点，使用**粗体**标记或项目符号(•)呈现，确保重点突出
+                        9. 必须包含行业最新数据、深度分析和专业洞见，避免泛泛而谈
+                        10. 对于矛盾的观点或数据，进行对比分析并提供客观评估
                         """
                     else:
-                        # 3-4条资料处理逻辑
+                        # 3-4条资料的处理提示，确保生成更丰富的内容
                         resource_texts = []
                         source_references = []
                         
@@ -558,27 +582,27 @@ def organize_industry_insights_with_sources(filtered_data, topic, subtopics, llm
                         all_resources = "\n\n".join(resource_texts)
                         source_reference_text = "\n".join(source_references)
                         
-                        prompt = f"""
-                        请基于以下{len(section_items)}条资料，为'{topic}行业洞察报告'的'{section_name}'章节生成专业、结构清晰的内容。
-                        
-                        {all_resources}
-                        
-                        要求：
-                        1. 深入分析和整合这些资料，提取关键信息和见解
-                        2. 将内容组织成多个简短的小节，确保结构清晰
-                        3. 使用层级标题组织内容：
-                           - 使用三级标题(###)作为主要分块，至少创建6-8个三级标题
-                           - 在每个三级标题下，使用四级标题(####)进一步细分内容，每个三级标题下至少有2-4个四级标题
-                        4. 控制每个段落的长度在100-250字之间，避免出现过长段落
-                        5. 确保标题简洁明了，能够概括该小节的核心内容
-                        6. 在相应内容后标注来源信息，示例格式: 
-                           {source_references[0]}
-                        7. 内容要客观专业，突出核心洞见，总体长度约3000-4000字
-                        8. 每个四级标题下的内容控制在200-300字之间，确保简洁明了
-                        9. 不要出现连续超过10行的无标题文本
-                        10. 对于数据和关键观点，使用项目符号(•)或编号列表呈现，提高可读性
-                        11. 在适当位置使用表格对比呈现不同要点
-                        """
+                        prompt = f"""请基于以下关于"{topic}{section_name}"的多个资料来源，创建一个极其详尽、专业且结构清晰的行业分析章节。本章节需要是报告中最全面深入的部分：
+
+{all_resources}
+
+要求：
+1. 创建一个内容极其丰富的专业行业分析章节，整合所有资料的核心观点和数据
+2. 分析必须非常深入且全面，使用多级标题组织内容（##、###、####）
+3. 必须详尽覆盖所有资料中的重要观点，进行系统性整合与深度拓展
+4. 章节应分为至少7-10个子标题，每个子标题下内容详尽充实
+5. 总体内容长度应达到4000-6000字，确保分析深度远超普通报告
+6. 对重要数据和概念使用**粗体**标记，提高可读性
+7. 使用专业术语和行业标准表述，保证内容权威性和专业性
+8. 在适当位置添加以下来源引用，确保内容可溯源：
+{source_reference_text}
+9. 每个小节标题应具体明确，并能准确概括其内容
+10. 不要简单堆砌资料，必须形成有深度的分析框架和独到见解
+11. 每个观点必须有充分展开的论述，避免点到即止
+12. 各小节之间应有逻辑衔接，形成连贯的分析体系
+13. 确保包含最新行业数据、案例分析和未来趋势预测
+14. 在章节开头提供简短概述，结尾处给出全面总结
+"""
                     
                     system_message = f"""
                     你是一位专业的{topic}行业分析师和内容组织专家，擅长创建结构清晰的专业报告。
@@ -591,11 +615,25 @@ def organize_industry_insights_with_sources(filtered_data, topic, subtopics, llm
                     # 设置较大的token限制，确保内容生成充分
                     try:
                         # 使用较低的temperature值以确保结构一致性
-                        section_content = llm_processor.call_llm_api(prompt, system_message, temperature=0.2, max_tokens=4000)
+                        section_content = llm_processor.call_llm_api(prompt, system_message, temperature=0.2, max_tokens=8000)
                     except:
                         # 如果上述调用失败，退回到标准调用
                         section_content = llm_processor.call_llm_api(prompt, system_message)
                     
+                    # === 新增：将[数据来源X]编号替换为完整来源 ===
+                    import re
+                    # 构建编号到来源的映射
+                    source_map = {}
+                    for idx, item in enumerate(section_items, 1):
+                        name = item.get("source", "行业分析")
+                        url = item.get("url", "#")
+                        source_map[str(idx)] = f"[数据来源: {name} - {url}]"
+                    # 替换所有[数据来源X]为完整来源
+                    def replace_source(match):
+                        idx = match.group(1)
+                        return source_map.get(idx, match.group(0))
+                    section_content = re.sub(r"\[数据来源(\d+)\]", replace_source, section_content)
+
                     # 确保来源信息在章节中
                     if len(section_items) == 1 and f"[数据来源" not in section_content:
                         item = section_items[0]
@@ -658,10 +696,10 @@ def organize_industry_insights_with_sources(filtered_data, topic, subtopics, llm
 def generate_section_content_simple(section_items):
     """
     使用简单方法生成章节内容，确保在每个小点下添加来源
-    注意：现在每个章节有3-4条资料，需要分成更小的小节
+    注意：现在每个章节有8-15条资料，需要分成更小的小节，并确保内容详尽
     
     Args:
-        section_items: 章节数据项列表（通常有3-4个元素）
+        section_items: 章节数据项列表（通常有8-15个元素）
         
     Returns:
         str: 生成的章节内容
@@ -670,6 +708,12 @@ def generate_section_content_simple(section_items):
     
     # 按相关性评分排序（确保最好的内容在前）
     section_items.sort(key=lambda x: x.get("relevance_score", 0), reverse=True)
+    
+    # 添加章节摘要
+    if len(section_items) > 0:
+        content += "### 章节概述\n\n"
+        overview = "本章节基于对多种权威资料的整合分析，提供了全面且深入的行业洞察。以下内容将从多个维度展开详细分析，涵盖了最新数据、关键趋势和专业观点。\n\n"
+        content += overview
     
     # 处理每个项目
     for i, item in enumerate(section_items):
@@ -683,7 +727,7 @@ def generate_section_content_simple(section_items):
         # 创建三级标题
         content += f"### {title}\n\n"
         
-        # 将内容分成更小的段落
+        # 将内容分成更小的段落，但保留更多内容并确保详尽
         if len(item_content) > 500:
             # 尝试按段落分割
             paragraphs = item_content.split('\n\n')
@@ -709,31 +753,37 @@ def generate_section_content_simple(section_items):
             
             # 创建四级标题和小节
             # 根据内容推断可能的小节标题
-            section_keywords = ["概述", "定义", "特点", "历史", "发展", "应用", "案例", "挑战", "前景", "趋势"]
+            section_keywords = ["概述", "定义", "特点", "历史", "发展", "应用", "案例", "挑战", "前景", "趋势", 
+                              "原理", "方法", "分析", "影响", "评估", "现状", "机制", "比较", "优势", "劣势", 
+                              "技术路线", "市场数据", "区域分布", "关键指标", "主要参与者"]
             
-            # 创建分段内容
-            for j, para in enumerate(paragraphs[:8]):  # 限制最多8个小节
+            # 创建分段内容，大幅增加保留内容量
+            for j, para in enumerate(paragraphs[:18]):  # 增加小节数量限制
                 if j < len(section_keywords):
                     subtitle = f"{title}的{section_keywords[j]}"
                 else:
-                    subtitle = f"{title}的其他方面({j+1})"
+                    subtitle = f"{title}的扩展分析({j+1})"
                 
                 # 添加四级标题
                 content += f"#### {subtitle}\n\n"
                 
-                # 添加段落内容
-                if len(para) > 3500:
-                    para = para[:3500] + "..."
+                # 添加段落内容，增加字符限制
+                if len(para) > 8000:  # 增加字符限制
+                    para = para[:8000] + "..."
                 
                 content += f"{para}\n\n"
-                
-                # 每两个小节后添加一次来源引用
-                if j % 2 == 1 or j == len(paragraphs[:8]) - 1:
-                    content += f"[数据来源: {source_name} - {source_url}]\n\n"
+                # 每个小节都加引用
+                content += f"[数据来源: {source_name} - {source_url}]\n\n"
         else:
             # 如果内容本身就很短，直接添加
             content += f"{item_content}\n\n"
             content += f"[数据来源: {source_name} - {source_url}]\n\n"
+    
+    # 添加章节总结
+    if len(section_items) > 0:
+        content += "### 章节小结\n\n"
+        summary = "综合以上分析，本章节全面阐述了相关领域的核心要点和最新发展。通过多维度的数据和案例分析，为读者提供了深入理解行业现状与趋势的基础。后续章节将进一步探讨其他关键方面，形成完整的行业洞察体系。\n\n"
+        content += summary
     
     return content
 

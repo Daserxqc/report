@@ -395,7 +395,12 @@ def get_research_data(topic, subtopics=None, days=7):
     
     输出要求:
     1. 明确列出3-5个主要研究方向
-    2. 每个方向提供3-5句话描述其核心关注点和重要性
+    2. 每个方向提供10-20句话详细描述其:
+       - 核心关注点和重要性
+       - 最新研究进展
+       - 技术难点和挑战
+       - 应用场景和价值
+       - 未来发展方向
     3. 按研究活跃度或前沿程度排序
     4. 对所有研究方向的来源进行标注，提供来源的链接
     5. 采用统一的markdown格式输出:
@@ -480,7 +485,7 @@ def get_research_data(topic, subtopics=None, days=7):
                 3. 评估研究方法的有效性和新颖性
                 4. 讨论研究结果对{topic}领域发展的意义和潜在影响
                 5. 使用专业、客观的语言
-                6. 长度控制在300-500字
+                6. 长度控制在1500-2000字
                 
                 格式要求:
                 1. 使用以下统一的章节结构:
@@ -512,7 +517,7 @@ def get_research_data(topic, subtopics=None, days=7):
                 2. 评估这些发现的可靠性和重要性
                 3. 讨论这些见解与当前{topic}领域发展的关系
                 4. 使用专业、客观的语言
-                5. 长度控制在250-400字
+                5. 长度控制在500-1000字
                 
                 格式要求:
                 1. 使用以下统一的章节结构:
@@ -572,7 +577,7 @@ def get_research_data(topic, subtopics=None, days=7):
     要求:
     - 使用专业、客观的语言
     - 有理有据，避免无根据的猜测
-    - 长度控制在700-900字
+    - 长度控制在2500-3000字
     - 必须使用中文输出除标题外的所有内容，技术术语可在中文后附上英文原名
     - 使用清晰的段落划分，每个观点之间空一行
     - 重要观点可以使用**加粗**或*斜体*强调
@@ -608,44 +613,64 @@ def get_research_data(topic, subtopics=None, days=7):
 
 本节选取该领域最具代表性和创新性的3-4篇核心论文进行深入分析。
 
-{'\n\n'.join(article_analyses)}
+{chr(10).join(article_analyses)}
 """
     
     # 6. 添加参考资料 - 修改这部分来包含所有被引用的资料
     sources = [{"title": item['title'], "url": item['url'], "authors": item['authors'], "source": item['source']} for item in research_items]
     
+    reference_number_to_url = {}
+    ref_counter = 1
+    reference_section = ""
     if sources:
         reference_section = "\n\n## 参考资料\n\n"
-        
-        # 收集所有独特的来源，确保没有重复
         unique_sources = {}
         for source in sources:
             if source["url"] not in unique_sources:
                 unique_sources[source["url"]] = source
-        
-        # 分别列出学术论文和研究见解
         academic_sources = [s for s in unique_sources.values() if s["source"] in ["arxiv", "IEEE Xplore", "CrossRef", "CORE"] or 
                           "arxiv" in s["source"].lower() or 
                           "ieee" in s["source"].lower() or 
                           "crossref" in s["source"].lower() or 
                           "core" in s["source"].lower()]
-        
         insight_sources = [s for s in unique_sources.values() if s not in academic_sources]
-        
         # 添加学术论文
         if academic_sources:
             reference_section += "### 学术论文\n\n"
             for i, source in enumerate(academic_sources):
                 authors_text = ', '.join(source['authors']) if isinstance(source['authors'], list) else source['authors']
-                reference_section += f"{i+1}. [{source['title']}]({source['url']}) - {authors_text}\n"
-                
+                reference_section += f"{ref_counter}. [{source['title']}]({source['url']}) - {authors_text}\n"
+                reference_number_to_url[ref_counter] = source['url']
+                ref_counter += 1
         # 添加研究见解
         if insight_sources:
             reference_section += "\n### 研究见解\n\n"
             for i, source in enumerate(insight_sources):
-                reference_section += f"{i+1}. [{source['title']}]({source['url']}) - {source['source']}\n"
-                
+                reference_section += f"{ref_counter}. [{source['title']}]({source['url']}) - {source['source']}\n"
+                reference_number_to_url[ref_counter] = source['url']
+                ref_counter += 1
         final_content += reference_section
+
+    # 替换正文中的"来源X"为带真实URL的markdown链接（只替换正文部分，不替换参考资料区）
+    import re
+    def replace_source_links(match):
+        num = int(match.group(1))
+        url = reference_number_to_url.get(num)
+        if url:
+            return f"[来源{num}]({url})"
+        else:
+            return match.group(0)
+    # 只替换正文部分，不替换参考资料区
+    if reference_section:
+        split_content = final_content.split("## 参考资料", 1)
+        if len(split_content) == 2:
+            main_body, refs = split_content
+            main_body = re.sub(r"来源(\d+)", replace_source_links, main_body)
+            final_content = main_body + "## 参考资料" + refs
+        else:
+            final_content = re.sub(r"来源(\d+)", replace_source_links, final_content)
+    else:
+        final_content = re.sub(r"来源(\d+)", replace_source_links, final_content)
     
     return {
         "content": final_content,
