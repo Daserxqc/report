@@ -59,8 +59,8 @@ class NewsCollector:
             'from': start_date.strftime('%Y-%m-%d'),
             'to': end_date.strftime('%Y-%m-%d'),
             'language': getattr(config, 'NEWS_LANGUAGE', 'zh'),
-            'sortBy': getattr(config, 'NEWS_SORT_BY', 'publishedAt'),
-            'pageSize': getattr(config, 'NEWS_MAX_RESULTS', 20),
+            'sortBy': 'publishedAt',  # 始终按发布时间排序
+            'pageSize': getattr(config, 'NEWS_MAX_RESULTS', 30),  # 增加结果数以获取更多最新新闻
             'apiKey': self.api_key
         }
         
@@ -187,75 +187,106 @@ class NewsCollector:
             
     def search_rss_feeds(self, feeds, query, days_back=7):
         """
-        Search for news articles from RSS feeds
+        从RSS源搜索新闻
         
         Args:
-            feeds (list): List of RSS feed URLs
-            query (str): The search query
-            days_back (int): How many days back to search
+            feeds (list): RSS源URL列表
+            query (str): 搜索查询
+            days_back (int): 向前搜索的天数
             
         Returns:
-            list: List of dictionaries containing article information
+            list: 包含文章信息的字典列表
         """
         results = []
-        cutoff_date = datetime.now() - timedelta(days=days_back)
+        current_date = datetime.now()
+        cutoff_date = current_date - timedelta(days=days_back)
         
-        for feed_url in tqdm(feeds, desc="搜索RSS订阅源"):
+        for feed_url in tqdm(feeds, desc="搜索RSS源"):
             try:
                 feed = feedparser.parse(feed_url)
-                feed_title = feed.feed.title if hasattr(feed, 'feed') and hasattr(feed.feed, 'title') else "Unknown"
+                feed_title = feed.feed.title if hasattr(feed.feed, 'title') else feed_url
                 
                 for entry in feed.entries:
-                    # Skip if no publication date
+                    # 跳过没有发布日期的条目
                     if not hasattr(entry, 'published'):
                         continue
                         
                     try:
                         pub_date = parser.parse(entry.published)
-                        if pub_date < cutoff_date:
+                        # 计算文章年龄（小时）
+                        age_hours = (current_date - pub_date).total_seconds() / 3600
+                        
+                        # 根据时间过滤和评分
+                        if age_hours > days_back * 24:  # 超过指定天数
                             continue
+                            
+                        # 计算时效性分数
+                        if age_hours <= 6:
+                            time_score = 1.0  # 6小时内的文章获得满分
+                        elif age_hours <= 12:
+                            time_score = 0.9
+                        elif age_hours <= 24:
+                            time_score = 0.8
+                        elif age_hours <= 48:
+                            time_score = 0.7
+                        elif age_hours <= 72:
+                            time_score = 0.6
+                        else:
+                            time_score = 0.5
+                            
+                        # 检查中英文查询词是否在标题或摘要中
+                        title = entry.title if hasattr(entry, 'title') else ""
+                        summary = entry.summary if hasattr(entry, 'summary') else ""
+                        content = entry.content[0].value if hasattr(entry, 'content') and len(entry.content) > 0 else summary
+                        
+                        # 更灵活的匹配方式，支持中英文关键词
+                        combined_text = (title + " " + summary).lower()
+                        query_terms = query.lower().split()
+                        
+                        # 计算相关性分数
+                        relevance_score = sum(term in combined_text for term in query_terms) / len(query_terms)
+                        
+                        # 只保留相关性超过阈值的文章
+                        if relevance_score < 0.3:  # 相关性阈值
+                            continue
+                            
+                        # 提取更完整的正文内容
+                        if hasattr(entry, 'content') and len(entry.content) > 0:
+                            full_content = entry.content[0].value
+                            try:
+                                soup = BeautifulSoup(full_content, 'html.parser')
+                                clean_content = soup.get_text()
+                            except:
+                                clean_content = full_content
+                        else:
+                            clean_content = summary
+                            
+                        # 计算综合分数（时效性权重更高）
+                        final_score = time_score * 0.6 + relevance_score * 0.4
+                        
+                        article_info = {
+                            'title': title,
+                            'authors': [entry.author] if hasattr(entry, 'author') else ['Unknown'],
+                            'summary': summary,
+                            'published': pub_date.strftime('%Y-%m-%d %H:%M:%S'),  # 保存更精确的时间
+                            'url': entry.link if hasattr(entry, 'link') else "",
+                            'source': feed_title,
+                            'content': clean_content,
+                            'time_score': time_score,
+                            'relevance_score': relevance_score,
+                            'final_score': final_score
+                        }
+                        results.append(article_info)
+                        
                     except Exception:
                         continue
                         
-                    # 检查中英文查询词是否在标题或摘要中
-                    title = entry.title if hasattr(entry, 'title') else ""
-                    summary = entry.summary if hasattr(entry, 'summary') else ""
-                    content = entry.content[0].value if hasattr(entry, 'content') and len(entry.content) > 0 else summary
-                    
-                    # 更灵活的匹配方式，支持中英文关键词
-                    combined_text = (title + " " + summary).lower()
-                    query_terms = query.lower().split()
-                    
-                    # 至少有一个查询词出现在文本中
-                    if not any(term in combined_text for term in query_terms):
-                        continue
-                        
-                    # 提取更完整的正文内容
-                    if hasattr(entry, 'content') and len(entry.content) > 0:
-                        full_content = entry.content[0].value
-                        # 使用BeautifulSoup清理HTML标签
-                        try:
-                            soup = BeautifulSoup(full_content, 'html.parser')
-                            clean_content = soup.get_text()
-                        except:
-                            clean_content = full_content
-                    else:
-                        clean_content = summary
-                        
-                    article_info = {
-                        'title': title,
-                        'authors': [entry.author] if hasattr(entry, 'author') else ['Unknown'],
-                        'summary': summary,
-                        'published': pub_date.strftime('%Y-%m-%d'),
-                        'url': entry.link if hasattr(entry, 'link') else "",
-                        'source': feed_title,
-                        'content': clean_content
-                    }
-                    results.append(article_info)
-                    
             except Exception as e:
                 print(f"处理Feed {feed_url}时出错: {str(e)}")
                 
+        # 按综合分数排序，优先展示最新最相关的新闻
+        results.sort(key=lambda x: x['final_score'], reverse=True)
+        
         print(f"从RSS源找到 {len(results)} 篇文章")
         return results
         

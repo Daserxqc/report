@@ -1158,29 +1158,28 @@ class TavilyCollector:
                     # 使用相关性评估方法对新闻进行评分和排序
                     # 具体评估标准依新闻类型有所调整
                     eval_criteria = {
-                        "主题相关性": 0.4,
-                        "时效性": 0.3,
-                        "信息质量": 0.2,
-                        "来源可靠性": 0.1
+                        "主题相关性": 0.35,
+                        "时效性": 0.4,     # 提高时效性权重
+                        "信息质量": 0.15,   # 略微降低
+                        "来源可靠性": 0.1   # 保持不变
                     }
                     
                     # 对重大新闻和政策新闻更看重时效性
                     if news_type in ["breaking_news", "policy_news"]:
                         eval_criteria = {
-                            "主题相关性": 0.35,
-                            "时效性": 0.4,  # 提高时效性权重
+                            "主题相关性": 0.3,
+                            "时效性": 0.45,  # 进一步提高重大新闻的时效性权重
                             "信息质量": 0.15,
                             "来源可靠性": 0.1
                         }
                     # 对创新和趋势新闻更看重信息质量
                     elif news_type in ["innovation_news", "trend_news"]:
                         eval_criteria = {
-                            "主题相关性": 0.4,
-                            "时效性": 0.2,
-                            "信息质量": 0.3,  # 提高信息质量权重
+                            "主题相关性": 0.35,
+                            "时效性": 0.35,  # 保持较高的时效性权重
+                            "信息质量": 0.2,
                             "来源可靠性": 0.1
                         }
-                    
                     # 对投资新闻使用标准权重
                     
                     # 执行评估
@@ -1260,12 +1259,12 @@ class TavilyCollector:
         if not items:
             return []
             
-        # 默认评估标准
+        # 修改默认评估标准，提高时效性权重
         default_criteria = {
-            "主题相关性": 0.4,  # 内容与主题的直接相关性
-            "时效性": 0.3,     # 内容的新鲜度
-            "信息质量": 0.2,   # 内容的完整性和信息量
-            "来源可靠性": 0.1   # 来源的权威性和可信度
+            "主题相关性": 0.35,  # 降低权重以增加时效性权重
+            "时效性": 0.4,     # 提高时效性权重
+            "信息质量": 0.15,   # 略微降低
+            "来源可靠性": 0.1   # 保持不变
         }
         
         criteria = criteria or default_criteria
@@ -1422,7 +1421,7 @@ class TavilyCollector:
                 topic_relevance += min(4, occurrences)
             
             # 2. 时效性评分 (基于文章发布日期或收录日期)
-            recency_score = 5  # 默认中等时效性
+            recency_score = 5
             if "published_date" in item:
                 published_date = item.get("published_date")
                 try:
@@ -1431,20 +1430,23 @@ class TavilyCollector:
                         from datetime import datetime
                         pub_date = datetime.strptime(published_date, "%Y-%m-%d")
                         today = datetime.now()
-                        days_old = (today - pub_date).days
-                        # 根据时间差调整时效性得分
-                        if days_old <= 1:
-                            recency_score = 10  # 非常新
-                        elif days_old <= 3:
-                            recency_score = 9
-                        elif days_old <= 7:
-                            recency_score = 8
-                        elif days_old <= 14:
-                            recency_score = 7
-                        elif days_old <= 30:
-                            recency_score = 6
+                        hours_old = (today - pub_date).total_seconds() / 3600
+                        
+                        # 使用更细粒度的时效性评分
+                        if hours_old <= 6:
+                            recency_score = 10  # 6小时内
+                        elif hours_old <= 12:
+                            recency_score = 9.5  # 12小时内
+                        elif hours_old <= 24:
+                            recency_score = 9  # 1天内
+                        elif hours_old <= 48:
+                            recency_score = 8  # 2天内
+                        elif hours_old <= 72:
+                            recency_score = 7  # 3天内
+                        elif hours_old <= 120:
+                            recency_score = 6  # 5天内
                         else:
-                            recency_score = 5
+                            recency_score = 5  # 5天以上
                 except:
                     # 解析日期失败，使用默认分数
                     pass
