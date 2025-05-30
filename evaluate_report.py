@@ -118,6 +118,17 @@ def main():
         topic=report_topic
     )
     
+    # 检查评估是否成功
+    if not evaluation:
+        print("错误: 评估失败，未返回有效结果")
+        return
+    
+    if "error" in evaluation:
+        print(f"评估过程中发生错误: {evaluation['error']}")
+        if "raw_response" in evaluation:
+            print(f"原始响应: {evaluation['raw_response'][:500]}...")
+        return
+    
     # 打印评估结果
     print("\n" + "="*50)
     print(f"报告 '{Path(report_path).name}' 评估结果")
@@ -125,24 +136,74 @@ def main():
     
     print(f"总体评分: {evaluation['overall_score']}/10")
     
+    # 显示评估可靠性信息
+    if 'score_reliability' in evaluation:
+        print(f"评估可靠性: {evaluation['score_reliability']}")
+    
+    if 'evaluation_attempts' in evaluation:
+        print(f"评估尝试次数: {evaluation['evaluation_attempts']}")
+    
+    if 'missing_dimensions' in evaluation:
+        print(f"缺失维度: {evaluation['missing_dimensions']}")
+    
     print("\n各维度评分:")
     for dimension, data in evaluation['scores'].items():
-        print(f"- {dimension}: {data['score']}/10 - {data['reason']}")
+        supplemented_mark = " (补充评估)" if data.get('supplemented') else ""
+        extracted_mark = " (文本提取)" if data.get('extracted') else ""
+        suspicious_mark = " ⚠️ 存疑" if data.get('suspicious') else ""
+        print(f"- {dimension}: {data['score']}/10 - {data['reason']}{supplemented_mark}{extracted_mark}{suspicious_mark}")
+        
+        # 如果有警告信息，显示详细信息
+        if data.get('warning'):
+            print(f"  ⚠️ 警告: {data['warning']}")
+        if data.get('evidence') and data.get('supplemented'):
+            print(f"    证据: {data['evidence'][:100]}...")
     
     print(f"\n总体评价: \n{evaluation['evaluation']}")
     
     print(f"\n改进建议: \n{evaluation['suggestions']}")
+    
+    # 检查是否有可疑评分
+    suspicious_dims = [dim for dim, data in evaluation['scores'].items() if data.get('suspicious')]
+    if suspicious_dims:
+        print(f"\n⚠️ 注意: 以下维度的补充评分可能不够准确，建议重新评估:")
+        for dim in suspicious_dims:
+            print(f"   - {dim}: {evaluation['scores'][dim]['score']}分")
     
     # 将评估结果保存到文件
     output_path = Path(report_path).with_suffix('.evaluation.txt')
     with open(output_path, "w", encoding="utf-8-sig") as f:
         f.write(f"报告 '{Path(report_path).name}' 评估结果\n")
         f.write("="*50 + "\n")
-        f.write(f"总体评分: {evaluation['overall_score']}/10\n\n")
+        f.write(f"总体评分: {evaluation['overall_score']}/10\n")
         
-        f.write("各维度评分:\n")
+        # 写入评估元信息
+        if 'score_reliability' in evaluation:
+            f.write(f"评估可靠性: {evaluation['score_reliability']}\n")
+        if 'evaluation_attempts' in evaluation:
+            f.write(f"评估尝试次数: {evaluation['evaluation_attempts']}\n")
+        if 'missing_dimensions' in evaluation:
+            f.write(f"缺失维度: {evaluation['missing_dimensions']}\n")
+        
+        f.write("\n各维度评分:\n")
         for dimension, data in evaluation['scores'].items():
-            f.write(f"- {dimension}: {data['score']}/10 - {data['reason']}\n")
+            supplemented_mark = " (补充评估)" if data.get('supplemented') else ""
+            extracted_mark = " (文本提取)" if data.get('extracted') else ""
+            suspicious_mark = " ⚠️ 存疑" if data.get('suspicious') else ""
+            f.write(f"- {dimension}: {data['score']}/10 - {data['reason']}{supplemented_mark}{extracted_mark}{suspicious_mark}\n")
+            
+            if data.get('warning'):
+                f.write(f"  ⚠️ 警告: {data['warning']}\n")
+            if data.get('evidence') and data.get('supplemented'):
+                f.write(f"    证据: {data['evidence']}\n")
+        
+        # 写入可疑评分警告
+        suspicious_dims = [dim for dim, data in evaluation['scores'].items() if data.get('suspicious')]
+        if suspicious_dims:
+            f.write(f"\n⚠️ 可疑评分警告:\n")
+            f.write(f"以下维度的补充评分可能不够准确，建议重新评估:\n")
+            for dim in suspicious_dims:
+                f.write(f"   - {dim}: {evaluation['scores'][dim]['score']}分\n")
         
         f.write(f"\n总体评价: \n{evaluation['evaluation']}\n")
         f.write(f"\n改进建议: \n{evaluation['suggestions']}\n")
