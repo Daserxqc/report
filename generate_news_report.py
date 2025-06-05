@@ -159,7 +159,7 @@ def process_breaking_news(llm_processor, topic, breaking_news):
     - 特别关注可能改变行业格局的突发事件
     - 突出不同来源的观点差异，但保持中立立场
     - 对争议性话题进行多角度分析
-    - 长度控制在1200-1500字
+    - 长度控制在1500-2000字
     """
     
     system = f"""你是一位权威的{topic}行业分析师，擅长从复杂信息中提取和总结最重要的行业事件与发展。
@@ -216,7 +216,7 @@ def process_innovation_news(llm_processor, topic, innovation_news):
     - 分析创新的实际应用价值
     - 对比不同来源的观点，突出共识与分歧
     - 对争议性技术进行多角度分析
-    - 长度控制在600-800字
+    - 长度控制在800-1000字
     """
     
     system = f"""你是一位专精于{topic}领域技术的分析师，擅长评估技术创新的潜力和影响。
@@ -249,58 +249,103 @@ def process_investment_news(llm_processor, topic, investment_news):
     if not investment_news:
         return f"## 投资与市场动向\n\n目前暂无{topic}行业的投资相关新闻。\n\n"
     
-    # 提取所有投资新闻的关键信息
+    # 提取所有投资新闻的关键信息，并标注时间
     all_news_text = "\n\n".join([
-        f"标题: {item.get('title', '无标题')}\n内容: {item.get('content', '无内容')[:500]}...\n来源: {item.get('source', '未知')}"
+        f"标题: {item.get('title', '无标题')}\n"
+        f"时间: {item.get('date', '未知日期')}\n"
+        f"内容: {item.get('content', '无内容')[:500]}...\n"
+        f"来源: {item.get('source', '未知')}"
         for item in investment_news
     ])
     
     prompt = f"""
-    请基于以下{topic}行业的最新投资、融资和市场变动信息，提供财务和市场分析，特别关注不同来源对同一投资事件的不同解读和预测。
+    请基于以下{topic}行业的最新投资、融资和市场变动信息，进行深度分析和解读。
+    注意：请严格限制在提供的新闻时间范围内进行分析，不要引用或分析范围之外的历史数据。
+    如果需要进行对比，请仅基于给定的新闻数据进行分析。
 
+    === 投资新闻数据 ===
     {all_news_text}
     
-    请提供:
-    1. 主要投资、并购或融资事件的摘要，包括金额和参与方
-    2. 不同来源对同一投资事件的评价对比分析
-    3. 资金流向分析 - 哪些细分领域获得了最多关注，以及各方对此的不同解读
-    4. 这些投资如何反映行业的发展趋势和市场信心的多角度分析
-    5. 值得关注的新兴公司或领域，以及各方对其前景的不同预测
-    6. 投资风险和市场泡沫的争议点分析
-    
-    要求:
-    - 包含关键的财务数据和估值信息
-    - 分析投资背后的战略考量
-    - 评估这些投资对行业格局的潜在影响
-    - 对比不同来源的观点，突出共识与分歧
-    - 对争议性投资进行多角度分析
-    - 长度控制在600-800字
+    请按以下框架进行详细分析：
+
+    1. 最新投融资动态分析（占比35%）
+    - 本期内重大投融资事件的具体情况（规模、轮次、投资方等）
+    - 投资方的战略意图分析
+    - 被投企业的核心竞争力评估
+    - 投资事件对行业格局的即时影响
+    - 不同投资事件的特点对比
+
+    2. 当期投资热点分析（占比25%）
+    - 本期内资本关注的主要领域
+    - 投资规模和频次分布
+    - 投资方向的变化特征
+    - 细分赛道的最新动态
+    - 短期投资趋势判断
+
+    3. 最新估值特征（占比20%）
+    - 本期内融资事件的估值特点
+    - 不同类型企业的估值差异
+    - 估值定价的最新依据
+    - 与近期其他案例的对比
+    - 短期估值趋势分析
+
+    4. 风险提示（占比10%）
+    - 当前政策环境变化
+    - 市场竞争态势
+    - 技术发展不确定性
+    - 商业模式挑战
+    - 投资风险提示
+
+    5. 近期投资建议（占比10%）
+    - 短期投资机会分析
+    - 重点关注方向
+    - 投资时机建议
+    - 具体策略参考
+    - 风险防范要点
+
+    要求：
+    1. 时效性：严格基于提供的新闻时间范围
+    2. 准确性：只分析确定的信息，不做过度推测
+    3. 客观性：保持中立的分析视角
+    4. 实用性：提供有针对性的建议
+    5. 完整性：确保分析框架完整
+    6. 长度要求：1500-2000字
+
+    注意：
+    - 仅使用给定新闻源中的信息进行分析
+    - 不要引用历史数据和范围外的信息
+    - 如信息不足，请说明分析的局限性
+    - 避免使用未经证实的市场传闻
     """
     
-    system = f"""你是一位专注于{topic}行业的投资分析师，擅长解读融资事件和市场动向。
-你特别注重对不同来源的投资评价进行对比分析，能够客观地呈现各方观点。
-你的分析应该保持中立，让读者能够全面了解投资事件的各个方面，包括其机遇和风险。"""
+    system = f"""你是一位专注于{topic}行业的资深投资分析师。
+你的分析需要：
+1. 严格遵守时间范围限制
+2. 基于实际新闻数据进行分析
+3. 保持客观专业的分析视角
+4. 注重分析的时效性和准确性
+5. 在有限信息下提供最有价值的见解"""
     
     try:
-        investment_summary = llm_processor.call_llm_api(prompt, system)
+        investment_summary = llm_processor.call_llm_api(prompt, system, max_tokens=8000)
         
-        # 收集这部分使用的新闻来源
+        # 收集这部分使用的新闻来源，并按时间排序
         news_sources = []
         for item in investment_news:
             title = item.get('title', '未知标题')
             url = item.get('url', '#')
             source = item.get('source', '未知来源')
             if url != '#':
-                news_sources.append(f"- [{title}]({url}) - {source}")
+                news_sources.append(f"- [{title} ({source}) - {url}")
         
         # 添加来源到摘要末尾
         if news_sources:
-            investment_summary += "\n\n**来源:**\n" + "\n".join(news_sources)
+            investment_summary += "\n\n**参考新闻来源:**\n" + "\n".join(sorted(news_sources))
             
         return f"## 投资与市场动向\n\n{investment_summary}\n\n"
     except Exception as e:
-        print(f"生成投资动向摘要时出错: {str(e)}")
-        return f"## 投资与市场动向\n\n暂无{topic}行业投资动向摘要。\n\n"
+        print(f"生成投资分析摘要时出错: {str(e)}")
+        return f"## 投资与市场动向\n\n暂无{topic}行业投资分析摘要。\n\n"
 
 def process_industry_trends(llm_processor, topic, trend_news):
     """处理行业趋势新闻，生成详细的趋势分析"""
@@ -490,7 +535,7 @@ def generate_comprehensive_trend_summary(llm_processor, topic, all_news_data):
 这个总结应当点明全局趋势，不再重复已有内容的细节，只需提炼核心观点。请保持简短精练。"""
     
     try:
-        summary = llm_processor.call_llm_api(prompt, system, max_tokens=3000)
+        summary = llm_processor.call_llm_api(prompt, system, max_tokens=4000)
         return f"## 行业趋势总结\n\n{summary}\n\n"
     except Exception as e:
         print(f"生成行业趋势总结时出错: {str(e)}")

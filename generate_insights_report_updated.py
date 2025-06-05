@@ -159,6 +159,74 @@ def evaluate_insights_relevance(raw_insights, topic, llm_processor=None):
         print(f"LLM相关性评估失败: {str(e)}，返回未筛选的原始数据")
         return raw_insights
 
+def expand_search_keywords(topic, llm_processor=None):
+    """
+    使用LLM扩展搜索关键词，包括中英文、相关术语等
+    
+    Args:
+        topic (str): 原始主题
+        llm_processor: LLM处理器实例
+        
+    Returns:
+        list: 扩展后的关键词列表（最多5个）
+    """
+    if not llm_processor:
+        # 如果没有LLM处理器，返回基本的中英文组合
+        english_topic = topic.replace('AI', 'Artificial Intelligence').replace('+', ' ')
+        return [topic, english_topic]
+    
+    try:
+        prompt = f"""请基于主题"{topic}"，生成最相关的5个搜索关键词，包括：
+1. 中英文对照（必须包含）
+2. 相关术语和概念
+3. 行业通用说法
+
+要求：
+1. 关键词要专业准确
+2. 确保相关性从高到低排序
+3. 只返回最相关的5个关键词
+4. 确保中英文都有覆盖
+5. 适合搜索引擎使用
+
+请以JSON格式返回，格式如下：
+{{
+    "keywords": [
+        "关键词1",
+        "关键词2",
+        "关键词3",
+        "关键词4",
+        "关键词5"
+    ]
+}}
+
+注意：严格遵守JSON格式，确保双引号正确使用，确保JSON可以被正确解析。
+"""
+        
+        system_message = f"""你是一位精通{topic}领域的专家，对该领域的各种专业术语和表达方式都非常熟悉。
+你需要帮助生成一个简短但准确的搜索关键词列表，这些关键词将用于搜索引擎检索相关内容。
+请确保生成的关键词专业、准确、相关性高，并严格遵守JSON格式规范。"""
+
+        # 使用LLM生成关键词列表
+        response = llm_processor.call_llm_api_json(prompt, system_message)
+        
+        if isinstance(response, dict) and "keywords" in response:
+            expanded_keywords = response["keywords"]
+            # 确保原始关键词在列表中
+            if topic not in expanded_keywords:
+                expanded_keywords.insert(0, topic)
+                # 如果插入后超过5个，删除最后一个
+                if len(expanded_keywords) > 5:
+                    expanded_keywords = expanded_keywords[:5]
+            print(f"成功扩展关键词：从1个扩展到{len(expanded_keywords)}个")
+            return expanded_keywords
+            
+    except Exception as e:
+        print(f"扩展关键词时出错: {str(e)}")
+    
+    # 出错时返回基本的中英文组合
+    english_topic = topic.replace('AI', 'Artificial Intelligence').replace('+', ' ')
+    return [topic, english_topic]
+
 def get_raw_industry_data_by_section(topic, section, llm_processor=None):
     """
     获取单个章节的原始数据，并立即评估筛选
@@ -171,88 +239,118 @@ def get_raw_industry_data_by_section(topic, section, llm_processor=None):
     Returns:
         list: 该章节筛选后的高质量数据（8-15条）
     """
+    # 首先扩展搜索关键词
+    expanded_topics = expand_search_keywords(topic, llm_processor)
+    print(f"\n使用扩展后的关键词进行搜索: {expanded_topics}")
+    
     tavily_collector = TavilyCollector()
-    queries = []
+    all_queries = []
     
-    # 根据章节增加更多查询组合
-    if "行业定义" in section or "核心特点" in section:
-        queries.append({"query": f"{topic} 行业定义 技术特征 核心价值 边界", "section": section})
-        queries.append({"query": f"{topic} 技术原理 核心功能 特点", "section": section})
-        queries.append({"query": f"{topic} 定义 概念 范围 特点", "section": section})
-        queries.append({"query": f"{topic} 技术架构 基础组件 核心价值主张", "section": section})
-        queries.append({"query": f"{topic} 技术标准 关键特征 区别于传统方法", "section": section})
-        queries.append({"query": f"{topic} 行业解析 核心技术 价值流", "section": section})
-    
-    elif "发展历程" in section or "阶段演进" in section:
-        queries.append({"query": f"{topic} 发展历程 关键阶段 里程碑 技术演进", "section": section})
-        queries.append({"query": f"{topic} 历史发展 演进路径 重大突破", "section": section})
-        queries.append({"query": f"{topic} 发展史 阶段 关键事件", "section": section})
-        queries.append({"query": f"{topic} 技术迭代 转折点 年表", "section": section})
-        queries.append({"query": f"{topic} 历史沿革 代际变迁 技术演化", "section": section})
-        queries.append({"query": f"{topic} 发展时间线 突破性事件 行业变革", "section": section})
-    
-    elif "产业链" in section or "价值分布" in section:
-        queries.append({"query": f"{topic} 产业链 上游 中游 下游 结构", "section": section})
-        queries.append({"query": f"{topic} 价值分布 成本结构 利润分配", "section": section})
-        queries.append({"query": f"{topic} 产业生态 供应链 价值链", "section": section})
-        queries.append({"query": f"{topic} 上下游企业 价值占比 核心环节", "section": section})
-        queries.append({"query": f"{topic} 产业结构 利润分布 关键角色", "section": section})
-        queries.append({"query": f"{topic} 产业地图 价值流动 环节分析", "section": section})
-    
-    elif "市场格局" in section or "参与者" in section:
-        queries.append({"query": f"{topic} 市场格局 竞争状况 市场份额 领先企业", "section": section})
-        queries.append({"query": f"{topic} 主要参与者 代表性企业 商业模式", "section": section})
-        queries.append({"query": f"{topic} 市场竞争 头部企业 排名", "section": section})
-        queries.append({"query": f"{topic} 市场集中度 竞争优势 商业地位", "section": section})
-        queries.append({"query": f"{topic} 细分市场 区域格局 国内外企业对比", "section": section})
-        queries.append({"query": f"{topic} 产业参与者 技术壁垒 竞争策略", "section": section})
-    
-    elif "核心驱动" in section or "趋势" in section:
-        queries.append({"query": f"{topic} 驱动因素 发展趋势 市场需求 技术演进", "section": section})
-        queries.append({"query": f"{topic} 趋势预测 技术发展 商业模式变革", "section": section})
-        queries.append({"query": f"{topic} 行业趋势 发展方向 演变", "section": section})
-        queries.append({"query": f"{topic} 主要趋势 科技突破 未来技术路线图", "section": section})
-        queries.append({"query": f"{topic} 行业变革 创新驱动 需求动力", "section": section})
-        queries.append({"query": f"{topic} 增长驱动力 新兴技术融合 产业升级", "section": section})
-    
-    elif "未来展望" in section or "挑战应对" in section:
-        queries.append({"query": f"{topic} 未来展望 技术突破 创新机遇", "section": section})
-        queries.append({"query": f"{topic} 行业挑战 问题 解决方案 策略", "section": section})
-        queries.append({"query": f"{topic} 未来发展 创新 突破 前景", "section": section})
-        queries.append({"query": f"{topic} 挑战 困难 应对策略", "section": section})
-        queries.append({"query": f"{topic} 增长空间 机遇窗口 发展瓶颈", "section": section})
-        queries.append({"query": f"{topic} 行业前景 预测分析 战略方向", "section": section})
-    
-    elif "政策环境" in section:
-        queries.append({"query": f"{topic} 政策环境 法规 监管 全球对比", "section": section})
-        queries.append({"query": f"{topic} 产业政策 扶持措施 监管趋势 影响", "section": section})
-        queries.append({"query": f"{topic} 法律法规 标准 合规要求", "section": section})
-        queries.append({"query": f"{topic} 国家政策 地方支持 监管框架", "section": section})
-        queries.append({"query": f"{topic} 国际政策 国内法规 合规成本", "section": section})
-        queries.append({"query": f"{topic} 政策导向 行业标准 合规体系", "section": section})
+    # 为每个扩展的主题创建查询
+    for expanded_topic in expanded_topics:
+        queries = []
+        # 根据章节增加更多查询组合
+        if "行业定义" in section or "核心特点" in section:
+            queries.extend([
+                {"query": f"{expanded_topic} 行业定义 技术特征 核心价值 边界", "section": section},
+                {"query": f"{expanded_topic} 技术原理 核心功能 特点", "section": section},
+                {"query": f"{expanded_topic} 定义 概念 范围 特点", "section": section},
+                {"query": f"{expanded_topic} 技术架构 基础组件 核心价值主张", "section": section},
+                {"query": f"{expanded_topic} 技术标准 关键特征 区别于传统方法", "section": section},
+                {"query": f"{expanded_topic} 行业解析 核心技术 价值流", "section": section}
+            ])
+        
+        elif "发展历程" in section or "阶段演进" in section:
+            queries.extend([
+                {"query": f"{expanded_topic} 发展历程 关键阶段 里程碑 技术演进", "section": section},
+                {"query": f"{expanded_topic} 历史发展 演进路径 重大突破", "section": section},
+                {"query": f"{expanded_topic} 发展史 阶段 关键事件", "section": section},
+                {"query": f"{expanded_topic} 技术迭代 转折点 年表", "section": section},
+                {"query": f"{expanded_topic} 历史沿革 代际变迁 技术演化", "section": section},
+                {"query": f"{expanded_topic} 发展时间线 突破性事件 行业变革", "section": section}
+            ])
+        
+        elif "产业链" in section or "价值分布" in section:
+            queries.extend([
+                {"query": f"{expanded_topic} 产业链 上游 中游 下游 结构", "section": section},
+                {"query": f"{expanded_topic} 价值分布 成本结构 利润分配", "section": section},
+                {"query": f"{expanded_topic} 产业生态 供应链 价值链", "section": section},
+                {"query": f"{expanded_topic} 上下游企业 价值占比 核心环节", "section": section},
+                {"query": f"{expanded_topic} 产业结构 利润分布 关键角色", "section": section},
+                {"query": f"{expanded_topic} 产业地图 价值流动 环节分析", "section": section}
+            ])
+        
+        elif "市场格局" in section or "参与者" in section:
+            queries.extend([
+                {"query": f"{expanded_topic} 市场格局 竞争状况 市场份额 领先企业", "section": section},
+                {"query": f"{expanded_topic} 主要参与者 代表性企业 商业模式", "section": section},
+                {"query": f"{expanded_topic} 市场竞争 头部企业 排名", "section": section},
+                {"query": f"{expanded_topic} 市场集中度 竞争优势 商业地位", "section": section},
+                {"query": f"{expanded_topic} 细分市场 区域格局 国内外企业对比", "section": section},
+                {"query": f"{expanded_topic} 产业参与者 技术壁垒 竞争策略", "section": section}
+            ])
+        
+        elif "核心驱动" in section or "趋势" in section:
+            queries.extend([
+                {"query": f"{expanded_topic} 驱动因素 发展趋势 市场需求 技术演进", "section": section},
+                {"query": f"{expanded_topic} 趋势预测 技术发展 商业模式变革", "section": section},
+                {"query": f"{expanded_topic} 行业趋势 发展方向 演变", "section": section},
+                {"query": f"{expanded_topic} 主要趋势 科技突破 未来技术路线图", "section": section},
+                {"query": f"{expanded_topic} 行业变革 创新驱动 需求动力", "section": section},
+                {"query": f"{expanded_topic} 增长驱动力 新兴技术融合 产业升级", "section": section}
+            ])
+        
+        elif "未来展望" in section or "挑战应对" in section:
+            queries.extend([
+                {"query": f"{expanded_topic} 未来展望 技术突破 创新机遇", "section": section},
+                {"query": f"{expanded_topic} 行业挑战 问题 解决方案 策略", "section": section},
+                {"query": f"{expanded_topic} 未来发展 创新 突破 前景", "section": section},
+                {"query": f"{expanded_topic} 挑战 困难 应对策略", "section": section},
+                {"query": f"{expanded_topic} 增长空间 机遇窗口 发展瓶颈", "section": section},
+                {"query": f"{expanded_topic} 行业前景 预测分析 战略方向", "section": section}
+            ])
+        
+        elif "政策环境" in section:
+            queries.extend([
+                {"query": f"{expanded_topic} 政策环境 法规 监管 全球对比", "section": section},
+                {"query": f"{expanded_topic} 产业政策 扶持措施 监管趋势 影响", "section": section},
+                {"query": f"{expanded_topic} 法律法规 标准 合规要求", "section": section},
+                {"query": f"{expanded_topic} 国家政策 地方支持 监管框架", "section": section},
+                {"query": f"{expanded_topic} 国际政策 国内法规 合规成本", "section": section},
+                {"query": f"{expanded_topic} 政策导向 行业标准 合规体系", "section": section}
+            ])
+        
+        all_queries.extend(queries)
     
     # 执行查询并收集结果
     section_results = []
     query_errors = 0
     
-    for query_info in queries:
+    # 为了避免重复结果，使用URL集合
+    seen_urls = set()
+    
+    for query_info in all_queries:
         query = query_info["query"]
         
         try:
-            print(f"正在搜索章节'{section}'的资料: {query}")
-            results = tavily_collector.search(query, max_results=10)  # 增加每个查询的结果数量
-            
-            print(f"查询 '{query}' 返回了 {len(results)} 条结果")
+            print(f"执行查询: {query}")
+            results = tavily_collector.search(query, max_results=5)  # 每个查询减少结果数，因为查询数量增加了
             
             if not results:
                 print(f"警告: 查询 '{query}' 没有返回任何结果")
                 continue
             
-            # 验证结果格式
-            for i, result in enumerate(results):
+            # 验证结果格式并去重
+            for result in results:
                 if not isinstance(result, dict):
                     continue
                     
+                url = result.get("url", "")
+                if url in seen_urls:
+                    continue
+                    
+                seen_urls.add(url)
+                
                 # 确保result有必要的字段
                 if "content" not in result or not result["content"]:
                     result["content"] = f"关于{query}的内容未获取到详细信息。"
@@ -260,9 +358,7 @@ def get_raw_industry_data_by_section(topic, section, llm_processor=None):
                 # 设置章节字段和来源查询
                 result["section"] = section
                 result["source_query"] = query
-            
-            # 添加到章节结果集
-            section_results.extend(results)
+                section_results.append(result)
             
         except Exception as e:
             print(f"查询'{query}'时出错: {str(e)}")
@@ -271,7 +367,7 @@ def get_raw_industry_data_by_section(topic, section, llm_processor=None):
     print(f"章节'{section}'共收集到 {len(section_results)} 条原始结果")
     
     # 如果查询全部失败或没有结果，返回空列表
-    if query_errors == len(queries) or len(section_results) == 0:
+    if query_errors == len(all_queries) or len(section_results) == 0:
         print(f"章节'{section}'的所有查询失败或没有返回结果")
         return []
     
@@ -280,7 +376,7 @@ def get_raw_industry_data_by_section(topic, section, llm_processor=None):
         print(f"立即评估章节'{section}'的 {len(section_results)} 条资料相关性...")
         scored_results = evaluate_insights_relevance(section_results, f"{topic} {section}", llm_processor)
         
-        # 保留最相关的8-15条，大幅增加数量以提供更丰富内容
+        # 保留最相关的8-15条
         if len(scored_results) > 15:
             print(f"章节'{section}'从 {len(scored_results)} 条中筛选出最相关的15条")
             high_quality_results = scored_results[:15]
@@ -288,14 +384,12 @@ def get_raw_industry_data_by_section(topic, section, llm_processor=None):
             print(f"章节'{section}'从 {len(scored_results)} 条中筛选出最相关的{len(scored_results)}条")
             high_quality_results = scored_results
         else:
-            # 如果结果少于8条，尽量保留所有结果
             high_quality_results = scored_results
             
         return high_quality_results
     
     # 如果没有LLM处理器，简单筛选
     if len(section_results) > 10:
-        # 基于标题和内容长度的简单筛选
         section_results.sort(key=lambda x: len(x.get("content", "")), reverse=True)
         return section_results[:10]
     
