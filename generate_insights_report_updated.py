@@ -8,9 +8,17 @@ from fix_md_headings import fix_markdown_headings
 
 from collectors.tavily_collector import TavilyCollector
 from collectors.news_collector import NewsCollector
+from collectors.brave_search_collector import BraveSearchCollector
+from collectors.google_search_collector import GoogleSearchCollector
+
 from generators.report_generator import ReportGenerator
 from collectors.llm_processor import LLMProcessor
 import config
+import logging
+
+# 关闭HTTP请求日志，减少干扰
+logging.getLogger("httpx").setLevel(logging.WARNING)
+logging.getLogger("urllib3").setLevel(logging.WARNING)
 
 def generate_industry_insights_without_api(topic, subtopics=None):
     """
@@ -229,7 +237,7 @@ def expand_search_keywords(topic, llm_processor=None):
 
 def get_raw_industry_data_by_section(topic, section, llm_processor=None):
     """
-    获取单个章节的原始数据，并立即评估筛选
+    获取单个章节的原始数据，并立即评估筛选 - 多渠道整合版本
     
     Args:
         topic (str): 主题
@@ -243,7 +251,17 @@ def get_raw_industry_data_by_section(topic, section, llm_processor=None):
     expanded_topics = expand_search_keywords(topic, llm_processor)
     print(f"\n使用扩展后的关键词进行搜索: {expanded_topics}")
     
+    # 初始化多个搜索收集器
     tavily_collector = TavilyCollector()
+    brave_collector = None
+    
+    # 尝试初始化Brave收集器
+    try:
+        brave_collector = BraveSearchCollector()
+        print("✅ Brave搜索收集器初始化成功")
+    except Exception as e:
+        print(f"⚠️ Brave搜索收集器初始化失败: {str(e)}，将仅使用Tavily")
+    
     all_queries = []
     
     # 为每个扩展的主题创建查询
@@ -322,69 +340,116 @@ def get_raw_industry_data_by_section(topic, section, llm_processor=None):
         
         all_queries.extend(queries)
     
-    # 执行查询并收集结果
+    # 执行多渠道查询并收集结果
     section_results = []
     query_errors = 0
     
     # 为了避免重复结果，使用URL集合
     seen_urls = set()
     
+    # 统计各渠道的结果数量
+    tavily_count = 0
+    brave_count = 0
+    
     for query_info in all_queries:
         query = query_info["query"]
         
+        # 1. 首先尝试Brave搜索
+        if brave_collector:
+            try:
+                print(f"🔍 [Brave] 执行查询: {query}")
+                brave_results = brave_collector.search(query, count=3)  # Brave每个查询3个结果
+                
+                if brave_results:
+                    for result in brave_results:
+                        if not isinstance(result, dict):
+                            continue
+                            
+                        url = result.get("url", "")
+                        if url in seen_urls:
+                            continue
+                            
+                        seen_urls.add(url)
+                        
+                        # 确保result有必要的字段
+                        if "content" not in result or not result["content"]:
+                            result["content"] = f"关于{query}的内容未获取到详细信息。"
+                        
+                        # 设置章节字段和来源查询
+                        result["section"] = section
+                        result["source_query"] = query
+                        result["search_engine"] = "Brave"
+                        section_results.append(result)
+                        brave_count += 1
+                else:
+                    print(f"⚠️ [Brave] 查询 '{query}' 没有返回结果")
+                    
+            except Exception as e:
+                print(f"❌ [Brave] 查询'{query}'时出错: {str(e)}")
+                query_errors += 1
+        
+        # 2. 然后执行Tavily搜索（补充）
         try:
-            print(f"执行查询: {query}")
-            results = tavily_collector.search(query, max_results=5)  # 每个查询减少结果数，因为查询数量增加了
+            print(f"🔍 [Tavily] 执行查询: {query}")
+            tavily_results = tavily_collector.search(query, max_results=3)  # Tavily每个查询3个结果
             
-            if not results:
-                print(f"警告: 查询 '{query}' 没有返回任何结果")
-                continue
-            
-            # 验证结果格式并去重
-            for result in results:
-                if not isinstance(result, dict):
-                    continue
+            if tavily_results:
+                for result in tavily_results:
+                    if not isinstance(result, dict):
+                        continue
+                        
+                    url = result.get("url", "")
+                    if url in seen_urls:
+                        continue
+                        
+                    seen_urls.add(url)
                     
-                url = result.get("url", "")
-                if url in seen_urls:
-                    continue
+                    # 确保result有必要的字段
+                    if "content" not in result or not result["content"]:
+                        result["content"] = f"关于{query}的内容未获取到详细信息。"
                     
-                seen_urls.add(url)
+                    # 设置章节字段和来源查询
+                    result["section"] = section
+                    result["source_query"] = query
+                    result["search_engine"] = "Tavily"
+                    section_results.append(result)
+                    tavily_count += 1
+            else:
+                print(f"⚠️ [Tavily] 查询 '{query}' 没有返回结果")
                 
-                # 确保result有必要的字段
-                if "content" not in result or not result["content"]:
-                    result["content"] = f"关于{query}的内容未获取到详细信息。"
-                
-                # 设置章节字段和来源查询
-                result["section"] = section
-                result["source_query"] = query
-                section_results.append(result)
-            
         except Exception as e:
-            print(f"查询'{query}'时出错: {str(e)}")
+            print(f"❌ [Tavily] 查询'{query}'时出错: {str(e)}")
             query_errors += 1
     
-    print(f"章节'{section}'共收集到 {len(section_results)} 条原始结果")
+    print(f"📊 章节'{section}'多渠道搜索完成:")
+    print(f"   - Brave搜索: {brave_count} 条结果")
+    print(f"   - Tavily搜索: {tavily_count} 条结果")
+    print(f"   - 总计: {len(section_results)} 条原始结果")
     
     # 如果查询全部失败或没有结果，返回空列表
-    if query_errors == len(all_queries) or len(section_results) == 0:
-        print(f"章节'{section}'的所有查询失败或没有返回结果")
+    if query_errors >= len(all_queries) * 0.8 or len(section_results) == 0:  # 允许20%的查询失败
+        print(f"❌ 章节'{section}'的大部分查询失败或没有返回结果")
         return []
     
     # 立即进行相关性评估和筛选
     if llm_processor and section_results:
-        print(f"立即评估章节'{section}'的 {len(section_results)} 条资料相关性...")
+        print(f"🔍 立即评估章节'{section}'的 {len(section_results)} 条资料相关性...")
         scored_results = evaluate_insights_relevance(section_results, f"{topic} {section}", llm_processor)
         
-        # 保留最相关的8-15条
+        # 保留最相关的8-15条，优先保证质量
         if len(scored_results) > 15:
-            print(f"章节'{section}'从 {len(scored_results)} 条中筛选出最相关的15条")
+            print(f"✂️ 章节'{section}'从 {len(scored_results)} 条中筛选出最相关的15条")
             high_quality_results = scored_results[:15]
         elif len(scored_results) > 8:
-            print(f"章节'{section}'从 {len(scored_results)} 条中筛选出最相关的{len(scored_results)}条")
+            print(f"✅ 章节'{section}'从 {len(scored_results)} 条中筛选出最相关的{len(scored_results)}条")
             high_quality_results = scored_results
         else:
             high_quality_results = scored_results
+        
+        # 显示各搜索引擎在最终结果中的占比
+        brave_final = len([r for r in high_quality_results if r.get("search_engine") == "Brave"])
+        tavily_final = len([r for r in high_quality_results if r.get("search_engine") == "Tavily"])
+        print(f"📈 最终筛选结果分布: Brave {brave_final}条, Tavily {tavily_final}条")
             
         return high_quality_results
     

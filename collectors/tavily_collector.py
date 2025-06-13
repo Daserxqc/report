@@ -1,6 +1,6 @@
 import requests
 import json
-from datetime import datetime
+from datetime import datetime, timedelta
 from tqdm import tqdm
 import config
 import re
@@ -168,8 +168,9 @@ class TavilyCollector:
             list: 包含新闻信息的列表
         """
         try:
-            # 构造查询
-            search_query = f"{company} {topic} 最新动态 新闻 过去{days}天"
+            # 构造查询，强化时间约束
+            current_year = datetime.now().year
+            search_query = f"{company} {topic} 最新动态 新闻 {current_year}年 最新"
             print(f"搜索: {search_query}")
             
             # 执行搜索 - 获取比需要的更多结果，以便后续筛选
@@ -204,9 +205,12 @@ class TavilyCollector:
                 "来源可靠性": 0.05
             }
             
+            # 首先进行时间过滤
+            time_filtered_news = self._filter_by_date(raw_news_items, days)
+            
             # 执行相关性评估
             scored_news = self.evaluate_content_relevance(
-                raw_news_items,
+                time_filtered_news,
                 f"{company} {topic}",
                 criteria=company_criteria,
                 llm_processor=llm_processor
@@ -1084,31 +1088,35 @@ class TavilyCollector:
         # 获取LLM处理器
         llm_processor = self._get_llm_processor()
         
-        # 增强搜索策略：使用更广泛的行业关键词，不仅关注大公司
+        # 增强搜索策略：使用更广泛的行业关键词，强化时间约束
+        current_year = datetime.now().year
+        current_month = datetime.now().strftime('%Y年%m月')
+        
         search_queries = {
             "breaking_news": [
-                f"{topic} 行业 重大新闻 突发 重要事件 最近{days}天",
-                f"{topic} industry major news breaking events last {days} days"
+                f"{topic} 行业 重大新闻 突发 重要事件 {current_year}年 最新",
+                f"{topic} industry major news breaking events {current_year} latest recent",
+                f"{topic} 行业 最新消息 {current_month} 重要新闻"
             ],
             "innovation_news": [
-                f"{topic} 行业 技术创新 新产品 研发突破 最近{days}天",
-                f"{topic} industry technology innovation new products breakthrough last {days} days",
-                f"{topic} 行业 创新应用 技术进展 最近{days}天"
+                f"{topic} 行业 技术创新 新产品 研发突破 {current_year}年 最新",
+                f"{topic} industry technology innovation new products breakthrough {current_year} latest",
+                f"{topic} 行业 创新应用 技术进展 {current_month} 最新"
             ],
             "trend_news": [
-                f"{topic} 行业 市场趋势 发展动向 最近{days}天",
-                f"{topic} industry market trends developments last {days} days",
-                f"{topic} 行业 消费趋势 用户需求变化 最近{days}天"
+                f"{topic} 行业 市场趋势 发展动向 {current_year}年 最新",
+                f"{topic} industry market trends developments {current_year} latest current",
+                f"{topic} 行业 消费趋势 用户需求变化 {current_month} 最新"
             ],
             "policy_news": [
-                f"{topic} 行业 政策法规 监管 新规 最近{days}天",
-                f"{topic} industry policy regulation compliance last {days} days",
-                f"{topic} 行业 政策支持 监管变化 最近{days}天"
+                f"{topic} 行业 政策法规 监管 新规 {current_year}年 最新",
+                f"{topic} industry policy regulation compliance {current_year} latest new",
+                f"{topic} 行业 政策支持 监管变化 {current_month} 最新"
             ],
             "investment_news": [
-                f"{topic} 行业 投资 融资 并购 市场交易 最近{days}天",
-                f"{topic} industry investment funding acquisition market deals last {days} days",
-                f"{topic} 行业 融资轮次 估值变化 投资方向 最近{days}天"
+                f"{topic} 行业 投资 融资 并购 市场交易 {current_year}年 最新",
+                f"{topic} industry investment funding acquisition market deals {current_year} latest",
+                f"{topic} 行业 融资轮次 估值变化 投资方向 {current_month} 最新"
             ]
         }
         
@@ -1182,9 +1190,12 @@ class TavilyCollector:
                         }
                     # 对投资新闻使用标准权重
                     
-                    # 执行评估
+                    # 首先进行时间过滤
+                    time_filtered_results = self._filter_by_date(raw_category_results, days)
+                    
+                    # 然后执行评估
                     scored_news = self.evaluate_content_relevance(
-                        raw_category_results, 
+                        time_filtered_results, 
                         f"{topic} {news_type.replace('_news', '')}",
                         criteria=eval_criteria,
                         llm_processor=llm_processor
@@ -1242,6 +1253,191 @@ class TavilyCollector:
         
         print(f"共收集到 {total_count} 条不同类型的高相关性行业新闻")
         return result
+    
+    def _filter_by_date(self, items, days_limit):
+        """
+        根据时间限制过滤内容项 - 只依赖可靠的时间信息
+        
+        Args:
+            items (list): 内容项列表
+            days_limit (int): 天数限制
+            
+        Returns:
+            list: 过滤后的内容项列表
+        """
+        if not items or days_limit <= 0:
+            return items
+            
+        filtered_items = []
+        cutoff_date = datetime.now() - timedelta(days=days_limit)
+        current_year = datetime.now().year
+        
+        print(f"  🔍 开始严格时间过滤，要求最近{days_limit}天内的内容（截止日期：{cutoff_date.strftime('%Y-%m-%d')}）")
+        print(f"  ⚠️ 注意：只接受有明确发布日期的内容，忽略'最新'、'今日'等关键词")
+        
+        for item in items:
+            should_include = False
+            filter_reason = ""
+            
+            title = item.get('title', '')
+            content = item.get('content', '')
+            combined_text = f"{title} {content}".lower()
+            
+            # 1. 首先检查是否包含明显的旧年份标识
+            old_year_patterns = ['2024年', '2023年', '2022年', '2021年', '2020年']
+            has_old_year = any(pattern in combined_text for pattern in old_year_patterns)
+            
+            if has_old_year:
+                filter_reason = "包含旧年份标识"
+                should_include = False
+            else:
+                # 2. 检查是否有可靠的发布日期信息
+                published_date = item.get("published_date")
+                
+                if published_date and published_date != "未知日期":
+                    try:
+                        # 尝试解析发布日期
+                        pub_date = None
+                        
+                        if isinstance(published_date, str):
+                            # 尝试多种日期格式
+                            date_formats = [
+                                "%Y-%m-%d",
+                                "%Y-%m-%d %H:%M:%S",
+                                "%Y-%m-%dT%H:%M:%S",
+                                "%Y-%m-%dT%H:%M:%S.%fZ",
+                                "%Y-%m-%dT%H:%M:%SZ",
+                                "%Y/%m/%d",
+                                "%d/%m/%Y",
+                                "%m/%d/%Y"
+                            ]
+                            
+                            for fmt in date_formats:
+                                try:
+                                    pub_date = datetime.strptime(published_date, fmt)
+                                    break
+                                except ValueError:
+                                    continue
+                        
+                        if pub_date:
+                            # 有明确的发布日期，检查是否在时间范围内
+                            if pub_date >= cutoff_date:
+                                should_include = True
+                                filter_reason = f"发布日期符合要求（{pub_date.strftime('%Y-%m-%d')}）"
+                            else:
+                                should_include = False
+                                filter_reason = f"发布日期过早（{pub_date.strftime('%Y-%m-%d')}）"
+                        else:
+                            # 无法解析发布日期
+                            should_include = False
+                            filter_reason = "无法解析发布日期格式"
+                            
+                    except Exception as e:
+                        should_include = False
+                        filter_reason = f"发布日期解析失败: {str(e)}"
+                        
+                else:
+                    # 3. 没有发布日期的情况 - 智能处理模糊日期
+                    
+                    # 检查是否包含模糊的日期格式（如"3月27日"、"12月15日"等）
+                    import re
+                    ambiguous_date_patterns = [
+                        r'(\d{1,2})月(\d{1,2})日',  # 3月27日
+                        r'(\d{1,2})/(\d{1,2})(?!\d)',  # 3/27 (但不是 3/27/2025)
+                        r'(\d{1,2})-(\d{1,2})(?!\d)',  # 3-27 (但不是 3-27-2025)
+                    ]
+                    
+                    ambiguous_date_match = None
+                    for pattern in ambiguous_date_patterns:
+                        match = re.search(pattern, combined_text)
+                        if match:
+                            ambiguous_date_match = match
+                            break
+                    
+                    if ambiguous_date_match:
+                        # 找到模糊日期，尝试智能判断
+                        try:
+                            month = int(ambiguous_date_match.group(1))
+                            day = int(ambiguous_date_match.group(2))
+                            
+                            # 假设是当前年份，构造日期
+                            current_date = datetime.now()
+                            try:
+                                assumed_date = datetime(current_date.year, month, day)
+                                
+                                # 检查这个日期是否在合理范围内
+                                days_diff = (current_date - assumed_date).days
+                                
+                                if days_diff < 0:
+                                    # 日期在未来，可能是去年的日期
+                                    assumed_date = datetime(current_date.year - 1, month, day)
+                                    days_diff = (current_date - assumed_date).days
+                                
+                                if days_diff <= days_limit:
+                                    # 在时间范围内
+                                    should_include = True
+                                    filter_reason = f"模糊日期推测为{assumed_date.strftime('%Y-%m-%d')}，在时间范围内"
+                                else:
+                                    # 超出时间范围
+                                    should_include = False
+                                    filter_reason = f"模糊日期推测为{assumed_date.strftime('%Y-%m-%d')}，超出{days_limit}天范围"
+                                    
+                            except ValueError:
+                                # 无效日期（如2月30日）
+                                should_include = False
+                                filter_reason = f"模糊日期{month}月{day}日无效"
+                                
+                        except (ValueError, IndexError):
+                            # 解析失败
+                            should_include = False
+                            filter_reason = "模糊日期解析失败"
+                    else:
+                        # 没有模糊日期，检查是否包含当前年份的明确标识
+                        current_year_patterns = [
+                            f'{current_year}年',
+                            f'年{current_year}',
+                            f'{current_year}-',
+                            f'{current_year}/'
+                        ]
+                        
+                        has_current_year = any(pattern in combined_text for pattern in current_year_patterns)
+                        
+                        if has_current_year:
+                            # 包含当前年份，但仍然要求是短期内的内容
+                            if days_limit <= 30:
+                                # 对于30天以内的要求，即使有当前年份也不够
+                                should_include = False
+                                filter_reason = f"包含{current_year}年但无具体日期（严格模式）"
+                            else:
+                                # 对于较长期的要求，可以接受
+                                should_include = True
+                                filter_reason = f"包含{current_year}年标识"
+                        else:
+                            # 既没有发布日期，也没有年份信息
+                            should_include = False
+                            filter_reason = "无发布日期且无年份信息"
+            
+            if should_include:
+                filtered_items.append(item)
+                if len(title) > 30:
+                    print(f"    ✅ 保留: {title[:30]}... ({filter_reason})")
+                else:
+                    print(f"    ✅ 保留: {title} ({filter_reason})")
+            else:
+                if len(title) > 30:
+                    print(f"    ❌ 过滤: {title[:30]}... ({filter_reason})")
+                else:
+                    print(f"    ❌ 过滤: {title} ({filter_reason})")
+        
+        original_count = len(items)
+        filtered_count = len(filtered_items)
+        
+        if filtered_count < original_count:
+            print(f"  ⏰ 严格时间过滤结果: {original_count} → {filtered_count} 条（排除了{original_count - filtered_count}条无可靠时间信息的内容）")
+        else:
+            print(f"  ⏰ 严格时间过滤结果: 保留全部{filtered_count}条内容")
+            
+        return filtered_items
 
     def evaluate_content_relevance(self, items, topic, criteria=None, llm_processor=None):
         """
@@ -1427,7 +1623,7 @@ class TavilyCollector:
                 try:
                     if isinstance(published_date, str):
                         # 尝试解析日期
-                        from datetime import datetime
+                        from datetime import datetime, timedelta
                         pub_date = datetime.strptime(published_date, "%Y-%m-%d")
                         today = datetime.now()
                         hours_old = (today - pub_date).total_seconds() / 3600

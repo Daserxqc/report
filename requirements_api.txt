@@ -1,0 +1,19 @@
+fastapi==0.104.1
+uvicorn[standard]==0.24.0
+pydantic==2.5.0
+python-multipart==0.0.6
+python-dotenv==1.0.0
+
+# 原有项目依赖
+requests==2.31.0
+beautifulsoup4==4.12.2
+arxiv==1.4.8
+openai==1.12.0
+newsapi-python==0.2.7
+langchain==0.0.314
+markdownify==0.11.6
+pandas==2.1.0
+tqdm==4.66.1
+feedparser==6.0.10
+python-dateutil==2.8.2
+tavily-python==0.3.0 

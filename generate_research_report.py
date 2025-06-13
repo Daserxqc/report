@@ -8,6 +8,7 @@ from fix_md_headings import fix_markdown_headings
 
 from collectors.arxiv_collector import ArxivCollector
 from collectors.tavily_collector import TavilyCollector
+from collectors.brave_search_collector import BraveSearchCollector
 # 添加对学术收集器的导入，如果文件存在
 try:
     from collectors.academic_collector import AcademicCollector
@@ -169,11 +170,28 @@ def get_research_data(topic, subtopics=None, days=7):
     print(f"子主题: {subtopics if subtopics else '无'}")
     print(f"时间范围: {days}天")
     
+    # 初始化LLM处理器
+    llm_processor = None
+    try:
+        from collectors.llm_processor import LLMProcessor
+        llm_processor = LLMProcessor()
+        print("✅ LLM处理器已初始化")
+    except Exception as e:
+        print(f"⚠️ LLM处理器初始化失败: {str(e)}")
+    
     # 收集学术文章 - 首先从arXiv获取
     print("从arxiv获取学术论文...")
     arxiv_collector = ArxivCollector()
     academic_articles = arxiv_collector.get_papers_by_topic(topic, subtopics, days)
     print(f"从arXiv找到 {len(academic_articles)} 篇学术论文")
+    
+    # 初始化Brave搜索收集器
+    brave_collector = None
+    try:
+        brave_collector = BraveSearchCollector()
+        print("✅ Brave搜索收集器已初始化")
+    except Exception as e:
+        print(f"⚠️ Brave搜索收集器初始化失败: {str(e)}")
     
     # 如果有AcademicCollector，尝试从其他学术源获取论文
     additional_articles = []
@@ -181,11 +199,6 @@ def get_research_data(topic, subtopics=None, days=7):
         try:
             print("从其他学术数据源获取补充论文...")
             academic_collector = AcademicCollector()
-            
-            # # 尝试从IEEE获取论文
-            # ieee_articles = academic_collector.search_ieee(topic, days)
-            # print(f"从IEEE Xplore找到 {len(ieee_articles)} 篇论文")
-            # additional_articles.extend(ieee_articles)
             
             # 尝试从CrossRef获取论文
             crossref_articles = academic_collector.search_crossref(topic, days)
@@ -198,26 +211,36 @@ def get_research_data(topic, subtopics=None, days=7):
             additional_articles.extend(core_articles)
             
             # 去重添加到学术文章列表中
-            existing_urls = {paper['url'] for paper in academic_articles}
-            for paper in additional_articles:
-                if paper['url'] not in existing_urls:
-                    academic_articles.append(paper)
-                    existing_urls.add(paper['url'])
-                    
-            print(f"总共收集到 {len(academic_articles)} 篇学术论文")
+            seen_urls = {article.get('url', '') for article in academic_articles}
+            for article in additional_articles:
+                if article.get('url', '') not in seen_urls:
+                    academic_articles.append(article)
+                    seen_urls.add(article.get('url', ''))
         except Exception as e:
             print(f"从其他学术源获取论文时出错: {str(e)}")
-            import traceback
-            print(traceback.format_exc())
     
-    # 初始化tavily收集器和LLM处理器
-    tavily_collector = TavilyCollector()
-    llm_processor = tavily_collector._get_llm_processor()
-    
-    # 如果学术文章不足，补充研究见解
+    # 使用Brave搜索获取研究内容
     research_insights = []
-    if len(academic_articles) < 5:
-        print("学术文章数量不足，补充搜索研究见解...")
+    if brave_collector and brave_collector.has_api_key:
+        try:
+            print("使用Brave搜索获取研究内容...")
+            brave_results = brave_collector.search_research_content(topic, days_back=days, max_results=10)
+            if brave_results:
+                # 去重并添加到研究见解中
+                seen_urls = {article.get('url', '') for article in academic_articles + additional_articles}
+                for result in brave_results:
+                    if result.get('url', '') not in seen_urls:
+                        result['is_research_insight'] = True
+                        research_insights.append(result)
+                        seen_urls.add(result.get('url', ''))
+                print(f"从Brave搜索获得 {len(research_insights)} 条研究见解")
+        except Exception as e:
+            print(f"Brave搜索研究内容时出错: {str(e)}")
+    
+    # 如果研究内容不足，使用Tavily补充
+    if len(research_insights) < 5:
+        print("研究内容数量不足，使用Tavily补充搜索...")
+        tavily_collector = TavilyCollector()
         
         # 使用LLM生成更精准的搜索关键词
         if llm_processor:
@@ -376,16 +399,25 @@ def get_research_data(topic, subtopics=None, days=7):
         research_items.append(item)
     
     # 2. 使用LLM识别和分类主要研究方向
-    research_text = "\n\n".join([
-        f"标题: {item['title']}\n摘要: {item['summary']}\n作者: {', '.join(item['authors'])}\n发布日期: {item['published']}\n来源: {item['source']}"
-        for item in research_items
-    ])
+    # 为每篇文章分配一个编号，便于引用
+    research_text_with_refs = ""
+    url_map = {}
+    
+    for idx, item in enumerate(research_items, 1):
+        research_text_with_refs += f"[文章{idx}] 标题: {item['title']}\n摘要: {item['summary']}\n作者: {', '.join(item['authors'])}\n发布日期: {item['published']}\n来源: {item['source']}\nURL: {item['url']}\n\n"
+        url_map[idx] = item['url']
+    
+    # 创建URL参考列表供LLM使用
+    url_reference_list = "\n".join([f"[文章{idx}]: {url}" for idx, url in url_map.items()])
     
     # 识别研究方向
     directions_prompt = f"""
     请分析以下{topic}领域的研究文章，识别出3-5个主要研究方向或子领域，并为每个方向提供简短描述。
     
-    {research_text}
+    {research_text_with_refs}
+    
+    URL参考列表（请严格按照此列表使用真实URL）:
+    {url_reference_list}
     
     在分析时，请注意:
     1. 专注于{topic}的核心研究方向，忽略仅将其应用于其他领域的研究
@@ -402,7 +434,7 @@ def get_research_data(topic, subtopics=None, days=7):
        - 应用场景和价值
        - 未来发展方向
     3. 按研究活跃度或前沿程度排序
-    4. 对所有研究方向的来源进行标注，提供来源的链接
+    4. 对所有研究方向的来源进行标注，使用上面URL参考列表中的真实链接
     5. 采用统一的markdown格式输出:
        - 研究方向名称使用**加粗**文本
        - 使用有序列表(1., 2., 3.)标注每个方向
@@ -411,7 +443,7 @@ def get_research_data(topic, subtopics=None, days=7):
        - 在每个研究方向之间添加两行以上空行，确保足够的间距
        - 在要点描述之间也添加适当空行
     6. 必须使用中文输出所有内容，包括研究方向名称也应翻译成中文（可附英文原名）
-    7. 对每个要点或关键发现，必须添加真实的论文来源链接，格式为[链接](真实URL)。必须引用原文提供的真实完整URL，绝不能使用'https://arxiv.org/abs/'这样的不完整URL或虚构URL
+    7. 当引用论文时，请使用格式：论文标题([文章X])，然后我会在后处理中将[文章X]替换为真实的链接。严禁编造任何URL，只能使用我提供的URL参考列表中的链接。
     """
     
     directions_system = f"""你是一位专业的{topic}领域研究专家，擅长分析和总结研究趋势。
@@ -429,7 +461,7 @@ def get_research_data(topic, subtopics=None, days=7):
    - 确保足够的空行和间距，使内容易于阅读
    - 在每个要点后添加空行
 6. 所有输出内容必须使用中文，如有必要可在中文名称后附上英文原名
-7. 必须使用提供的研究文章中的真实URL作为引用链接，绝对不要使用虚构的URL或通用URL模板。确保每个URL都是完整且实际存在的链接。"""
+7. 当需要引用论文时，使用格式：论文标题([文章X])，其中X是我提供的文章编号。绝对不要编造任何URL，只使用我提供的编号系统。"""
     
     try:
         research_directions = llm_processor.call_llm_api(directions_prompt, directions_system)
@@ -566,7 +598,10 @@ def get_research_data(topic, subtopics=None, days=7):
     future_prompt = f"""
     基于以下{topic}领域的最新研究文章，请分析该领域的核心发展趋势和未来研究方向。
     
-    {research_text}
+    {research_text_with_refs}
+    
+    URL参考列表（请严格按照此列表使用真实URL）:
+    {url_reference_list}
     
     请提供:
     1. {topic}领域核心技术和方法的发展趋势，而非应用领域的扩展
@@ -582,14 +617,14 @@ def get_research_data(topic, subtopics=None, days=7):
     - 使用清晰的段落划分，每个观点之间空一行
     - 重要观点可以使用**加粗**或*斜体*强调
     - 分点表述时使用编号或项目符号，并保持一致的格式
-    - 必须使用提供的研究文章中的真实完整URL作为引用链接，格式为[链接](真实URL)。绝不能使用不完整URL或虚构URL。
+    - 当引用论文时，请使用格式：论文标题([文章X])，然后我会在后处理中将[文章X]替换为真实的链接。严禁编造任何URL，只能使用我提供的URL参考列表中的链接。
     """
     
     future_system = f"""你是一位权威的{topic}领域趋势分析专家，擅长分析研究动态并预测未来发展。
 请基于最新文献提供深入的趋势分析，专注于该领域的核心发展方向，而非应用场景。
 区分{topic}领域自身的发展趋势与其在其他领域的应用趋势。
 注重排版的清晰和美观，保持适当的空行和间距，使内容更易于阅读。
-最重要的是：必须使用真实完整的文献URL进行引用，绝不能使用'https://arxiv.org/abs/'这样的不完整URL或虚构URL。每个链接必须直接引用原始文献的实际网址。"""
+当需要引用论文时，使用格式：论文标题([文章X])，其中X是我提供的文章编号。绝对不要编造任何URL，只使用我提供的编号系统。"""
     
     try:
         future_outlook = llm_processor.call_llm_api(future_prompt, future_system)
@@ -615,6 +650,21 @@ def get_research_data(topic, subtopics=None, days=7):
 
 {chr(10).join(article_analyses)}
 """
+    
+    # 替换文章引用为真实的URL链接
+    import re
+    def replace_article_refs(match):
+        article_num = int(match.group(1))
+        if article_num in url_map:
+            # 查找对应的文章标题
+            article_title = research_items[article_num-1]['title'] if article_num <= len(research_items) else f"文章{article_num}"
+            url = url_map[article_num]
+            return f"[{article_title}]({url})"
+        else:
+            return match.group(0)
+    
+    # 替换所有[文章X]引用
+    final_content = re.sub(r'\[文章(\d+)\]', replace_article_refs, final_content)
     
     # 6. 添加参考资料 - 修改这部分来包含所有被引用的资料
     sources = [{"title": item['title'], "url": item['url'], "authors": item['authors'], "source": item['source']} for item in research_items]
@@ -651,26 +701,7 @@ def get_research_data(topic, subtopics=None, days=7):
                 ref_counter += 1
         final_content += reference_section
 
-    # 替换正文中的"来源X"为带真实URL的markdown链接（只替换正文部分，不替换参考资料区）
-    import re
-    def replace_source_links(match):
-        num = int(match.group(1))
-        url = reference_number_to_url.get(num)
-        if url:
-            return f"[来源{num}]({url})"
-        else:
-            return match.group(0)
-    # 只替换正文部分，不替换参考资料区
-    if reference_section:
-        split_content = final_content.split("## 参考资料", 1)
-        if len(split_content) == 2:
-            main_body, refs = split_content
-            main_body = re.sub(r"来源(\d+)", replace_source_links, main_body)
-            final_content = main_body + "## 参考资料" + refs
-        else:
-            final_content = re.sub(r"来源(\d+)", replace_source_links, final_content)
-    else:
-        final_content = re.sub(r"来源(\d+)", replace_source_links, final_content)
+    # 注意：已经在上面处理了[文章X]引用的替换，不需要额外的来源链接替换
     
     return {
         "content": final_content,

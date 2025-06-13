@@ -13,6 +13,13 @@ DEEPSEEK_API_KEY = os.getenv("DEEPSEEK_API_KEY")
 DEEPSEEK_API_URL = os.getenv("DEEPSEEK_API_URL")
 IEEE_API_KEY = os.getenv("IEEE_API_KEY")
 
+# Google Search API settings
+GOOGLE_SEARCH_API_KEY = os.getenv("GOOGLE_SEARCH_API_KEY")
+GOOGLE_SEARCH_CX = os.getenv("GOOGLE_SEARCH_CX")  # Custom Search Engine ID
+
+# Brave Search API settings
+BRAVE_SEARCH_API_KEY = os.getenv("BRAVE_SEARCH_API_KEY", "BSA4bcKQe6t46PvsVgwVmTNSSvynmbI")
+
 # ArXiv settings
 ARXIV_MAX_RESULTS = 50
 ARXIV_SORT_BY = "submittedDate"
