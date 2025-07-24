@@ -31,17 +31,11 @@ class LLMProcessor:
         if "/v1" not in self.base_url:
             self.base_url += "/v1"
             
-        # 设置模型，默认使用gpt-3.5-turbo
-        self.model = model or getattr(config, "LLM_MODEL", "gpt-3.5-turbo")
+        # 统一使用 dashscope 的 deepseek-v3 模型
+        self.model = model or getattr(config, "LLM_MODEL", "deepseek-v3")
         
-        # 根据base_url判断使用的API类型
-        self.is_openai = "openai" in self.base_url.lower()
-        self.is_azure = "azure" in self.base_url.lower()
-        self.is_deepseek = "deepseek" in self.base_url.lower()
-        
-        # 如果是深度思考API，使用其专用模型
-        if self.is_deepseek:
-            self.model = "deepseek-chat"
+        # 使用 dashscope API
+        self.model = "deepseek-v3"
             
         print(f"LLM处理器已初始化，使用的模型: {self.model}, API URL: {self.base_url}")
         

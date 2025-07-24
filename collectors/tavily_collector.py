@@ -434,7 +434,7 @@ class TavilyCollector:
             
             # 准备请求数据
             data = {
-                "model": "gpt-3.5-turbo",
+                "model": "deepseek-v3",
                 "messages": [
                     {"role": "system", "content": "你是一个专业的翻译助手，请将英文文本翻译成中文，保持专业准确。直接给出翻译结果，不要包含任何解释或额外文字。"},
                     {"role": "user", "content": prompt}

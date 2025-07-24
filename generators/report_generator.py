@@ -18,23 +18,12 @@ class ReportGenerator:
             
         self.client = OpenAI(**client_kwargs)
         
-        # 确定API提供商
-        self.is_deepseek = self.base_url and "deepseek" in self.base_url.lower()
-        
-        # 根据API提供商设置模型
-        if self.is_deepseek:
-            # DeepSeek模型
-            self.default_models = {
-                "chat": ["deepseek-chat"],  # DeepSeek的模型名称
-                "embedding": ["embedding"]
-            }
-            print("使用DeepSeek API，已配置对应的模型")
-        else:
-            # OpenAI模型
-            self.default_models = {
-                "chat": ["gpt-4o", "gpt-4", "gpt-3.5-turbo", "gpt-3.5-turbo-16k"],
-                "embedding": ["text-embedding-ada-002"]
-            }
+        # 使用 dashscope 配置，统一使用 deepseek-v3 模型
+        self.default_models = {
+            "chat": ["deepseek-v3"],  # 使用 dashscope 的 deepseek-v3 模型
+            "embedding": ["embedding"]
+        }
+        print("使用 dashscope API，已配置 deepseek-v3 模型")
         
         # Create output directory if it doesn't exist
         os.makedirs(config.OUTPUT_DIR, exist_ok=True)
@@ -78,11 +67,10 @@ class ReportGenerator:
                 continue
         
         # 所有模型都失败时的处理
-        if self.is_deepseek:
-            print("DeepSeek API调用失败。可能的原因：")
-            print("1. API密钥不正确或已过期")
-            print("2. 使用了不支持的参数")
-            print("3. 服务器暂时不可用")
+        print("dashscope API调用失败。可能的原因：")
+        print("1. API密钥不正确或已过期")
+        print("2. 使用了不支持的参数")
+        print("3. 服务器暂时不可用")
         
         # 如果所有模型都失败，返回一个基本回应
         fallback_msg = f"无法生成内容。请检查API配置或尝试稍后再试。最后错误: {last_error}"
@@ -301,12 +289,8 @@ class ReportGenerator:
             print(f"将使用配置的模型进行翻译: {models_to_try}")
             
             # 配置翻译提示
-            if self.is_deepseek:
-                system_content = "你是一位专业翻译，请将非中文内容翻译成流畅、准确的中文。保留专业术语和技术细节。"
-                user_content = f"将以下非中文内容翻译成中文:\n\n{text}"
-            else:
-                system_content = "你是一位专业翻译，需要将非中文专业内容翻译成流畅、准确的中文。保留原文的专业性和技术细节。"
-                user_content = f"请将以下文本翻译成中文:\n\n{text}"
+            system_content = "你是一位专业翻译，请将非中文内容翻译成流畅、准确的中文。保留专业术语和技术细节。"
+            user_content = f"将以下非中文内容翻译成中文:\n\n{text}"
             
             # 尝试翻译
             try:

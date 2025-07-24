@@ -15,13 +15,13 @@ class ImprovedTranslator:
         if self.base_url.endswith('/'):
             self.base_url = self.base_url[:-1]
         
-        # 判断API类型
-        self.is_deepseek = "deepseek" in self.base_url.lower()
+        # 使用 dashscope API
+        self.is_dashscope = True
         
         # 打印配置信息
         print(f"API密钥: {'已配置' if self.api_key else '未配置'}")
         print(f"基础URL: {self.base_url}")
-        print(f"API类型: {'DeepSeek' if self.is_deepseek else 'OpenAI'}")
+        print(f"API类型: dashscope")
         
         # 设置API端点
         if "/v1/chat/completions" in self.base_url:
@@ -66,7 +66,7 @@ class ImprovedTranslator:
         ]
         
         data = {
-            "model": "deepseek-chat" if self.is_deepseek else "gpt-3.5-turbo",
+            "model": "deepseek-r1",
             "messages": messages,
             "temperature": 0.1,
             "max_tokens": min(len(text) * 2, 1500)  # 动态调整token长度

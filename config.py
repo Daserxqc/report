@@ -4,11 +4,11 @@ from dotenv import load_dotenv
 # Load environment variables
 load_dotenv()
 
-# API Keys
-OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
+# API Keys - 使用 dashscope 作为默认配置
+OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "sk-5b73166a137b4a93add9e4ffe6d68aa6")
 NEWSAPI_KEY = os.getenv("NEWSAPI_KEY")
 TAVILY_API_KEY = os.getenv("TAVILY_API_KEY")
-OPENAI_BASE_URL = os.getenv("OPENAI_BASE_URL")
+OPENAI_BASE_URL = os.getenv("OPENAI_BASE_URL", "https://dashscope.aliyuncs.com/compatible-mode/v1")
 DEEPSEEK_API_KEY = os.getenv("DEEPSEEK_API_KEY")
 DEEPSEEK_API_URL = os.getenv("DEEPSEEK_API_URL")
 IEEE_API_KEY = os.getenv("IEEE_API_KEY")
@@ -78,6 +78,7 @@ REPORT_SECTIONS = [
 ]
 
 # LLM settings
+LLM_MODEL = "deepseek-v3"  # 默认使用 dashscope 的 deepseek-v3 模型
 MAX_TOKENS = 8192
 TEMPERATURE = 0.3
 

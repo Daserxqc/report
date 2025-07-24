@@ -21,9 +21,9 @@ def test_direct_api_call():
     if base_url.endswith('/'):
         base_url = base_url[:-1]
     
-    # 判断是否为DeepSeek API
-    is_deepseek = "deepseek" in base_url.lower()
-    print(f"使用DeepSeek API: {is_deepseek}")
+    # 使用 dashscope API
+    is_dashscope = True
+    print(f"使用 dashscope API: {is_dashscope}")
     
     # 构建API端点
     if "/v1/chat/completions" in base_url:
@@ -48,7 +48,7 @@ def test_direct_api_call():
     ]
     
     data = {
-        "model": "deepseek-chat" if is_deepseek else "gpt-3.5-turbo",
+        "model": "deepseek-v3",
         "messages": messages,
         "temperature": 0.3,
         "max_tokens": 500

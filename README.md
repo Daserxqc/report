@@ -91,13 +91,13 @@ python evaluate_report.py --report "reports/AI行业动态报告.md" --type news
 
 本系统依赖以下外部服务：
 - Tavily API（用于网络搜索和信息收集）
-- OpenAI/DeepSeek API（用于内容处理和生成）
+- dashscope API（用于内容处理和生成，使用 deepseek-v3 模型）
 - ArXiv API（用于学术论文搜索）
 
 请确保已在`.env`文件中配置以下环境变量：
 ```
-OPENAI_API_KEY=your_openai_api_key
-OPENAI_BASE_URL=https://api.openai.com/v1  # 可选，如果使用代理
+OPENAI_API_KEY=sk-5b73166a137b4a93add9e4ffe6d68aa6  # 默认使用 dashscope
+OPENAI_BASE_URL=https://dashscope.aliyuncs.com/compatible-mode/v1  # 默认使用 dashscope
 TAVILY_API_KEY=your_tavily_api_key
 DEEPSEEK_API_KEY=your_deepseek_api_key  # 可选
 DEEPSEEK_BASE_URL=https://api.deepseek.com # 可选
