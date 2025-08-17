@@ -58,7 +58,7 @@ class GoogleSearchCollector:
         if not self.has_api_key:
             print("Google Search API密钥或CX未配置，将无法执行搜索")
         else:
-            print("✅ Google搜索收集器已初始化")
+            pass  # print("✅ Google搜索收集器已初始化")  # MCP需要静默
     
     def search(self, query: str, days_back: int = 7, max_results: int = 10, 
                site_search: str = None, file_type: str = None) -> List[Dict]:

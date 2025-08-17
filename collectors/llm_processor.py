@@ -37,7 +37,7 @@ class LLMProcessor:
         # 使用 dashscope API
         self.model = "deepseek-v3"
             
-        print(f"LLM处理器已初始化，使用的模型: {self.model}, API URL: {self.base_url}")
+        # print(f"LLM处理器已初始化，使用的模型: {self.model}, API URL: {self.base_url}")  # MCP需要静默
         
     @retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, min=2, max=10))
     def call_llm_api(self, prompt: str, system_message: Optional[str] = None, 
@@ -66,7 +66,8 @@ class LLMProcessor:
             
             # 使用较大的max_tokens确保完整输出
             if max_tokens < 4000:
-                print(f"警告: max_tokens值 {max_tokens} 较小，可能导致输出截断。建议设置更大的值。")
+                # print(f"警告: max_tokens值 {max_tokens} 较小，可能导致输出截断。建议设置更大的值。")  # MCP静默
+                pass
             
             # 尝试使用OpenAI Python库
             try:
@@ -91,7 +92,7 @@ class LLMProcessor:
                     
             except ImportError:
                 # 如果没有OpenAI库，使用requests直接调用API
-                print("OpenAI库未安装，使用HTTP请求调用API")
+                # print("OpenAI库未安装，使用HTTP请求调用API")  # MCP静默
                 
                 headers = {
                     "Content-Type": "application/json",

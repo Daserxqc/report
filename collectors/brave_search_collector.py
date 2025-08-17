@@ -61,7 +61,7 @@ class BraveSearchCollector:
         if not self.has_api_key:
             print("Brave Search API密钥未配置，将无法执行搜索")
         else:
-            print("✅ Brave搜索收集器已初始化")
+            pass  # print("✅ Brave搜索收集器已初始化")  # MCP需要静默
     
     def _get_headers(self):
         """

@@ -1,0 +1,14 @@
+{
+  "mcpServers": {
+    "search-mcp": {
+      "command": "python",
+      "args": [
+        "search_main.py"
+      ],
+      "cwd": "E:\\report_generation\\search_mcp"
+    }
+  }
+}
+
+
+

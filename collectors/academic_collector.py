@@ -69,7 +69,7 @@ class AcademicCollector:
             "金融科技": "fintech"
         }
         
-        print(f"学术收集器已初始化，可用API: {[k for k, v in self.available_apis.items() if v]}")
+        # print(f"学术收集器已初始化，可用API: {[k for k, v in self.available_apis.items() if v]}")  # MCP需要静默
 
     def _translate_to_english(self, text):
         """

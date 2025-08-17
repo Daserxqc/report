@@ -1,0 +1,18 @@
+{
+    "mcpServers": {
+      "search-mcp": {
+        "name": "搜索MCP服务",
+        "command": "python",
+        "args": ["main.py"],
+        "cwd": "E:/report_generation",
+        "env": {
+          "TAVILY_API_KEY": "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",
+          "BRAVE_SEARCH_API_KEY": "BSAdGoYRTxcWkjW2TRGE_pMIHekJX1Z",
+          "GOOGLE_SEARCH_API_KEY": "AIzaSyDR1_7txzV9FRzHNqcAijyvYqXLjh5g2SA",
+          "GOOGLE_SEARCH_CX": "724f8dc7620df4d3b",
+          "IEEE_API_KEY": "7avgue685eh5hq76ykf83595",
+          "CORE_API_KEY": "AdN83xkEVF14I7qUStOL0KGJylYBQwXi"
+        }
+      }
+    }
+  }
