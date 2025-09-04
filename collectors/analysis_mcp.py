@@ -84,6 +84,132 @@ class AnalysisMcp:
     def _load_analysis_templates(self) -> Dict[str, str]:
         """加载分析模板"""
         return {
+            # 初始搜索结果质量评估
+            "initial_search_quality": """
+请对以下初始搜索结果进行质量评估，重点关注信息的基础质量和覆盖面。
+
+评估维度：
+1. 相关性 (Relevance): 内容与主题"{topic}"的匹配程度 (0-10分)
+2. 可信度 (Credibility): 来源的权威性和内容的准确性 (0-10分)
+3. 完整性 (Completeness): 信息的全面性和深度 (0-10分)
+4. 时效性 (Timeliness): 信息的新鲜度和时间相关性 (0-10分)
+5. 多样性 (Diversity): 信息来源和视角的多样性 (0-10分)
+
+搜索结果数量: {data_count}条
+搜索结果：
+{content_data}
+
+请为每个维度给出0-10的评分，总分为各维度平均分。
+
+输出格式：
+```json
+{{
+    "relevance": 7.5,
+    "credibility": 6.8,
+    "completeness": 5.2,
+    "timeliness": 8.1,
+    "diversity": 6.5,
+    "overall": 6.82,
+    "analysis_details": {{
+        "relevance_reasons": "相关性分析",
+        "credibility_factors": "可信度评估",
+        "completeness_gaps": "完整性缺口识别",
+        "timeliness_assessment": "时效性评估",
+        "diversity_analysis": "多样性分析",
+        "improvement_suggestions": ["具体改进建议"]
+    }}
+}}
+```
+""",
+
+            # 迭代优化质量评估
+            "iterative_quality": """
+请对经过{iteration_count}轮优化后的搜索结果进行质量评估。
+
+当前基线评分: {baseline_score:.2f}/10
+目标评分: {quality_threshold}/10
+
+评估重点：
+1. 信息深度提升 (Depth Improvement): 相比基线的深度改善
+2. 覆盖面扩展 (Coverage Expansion): 新增信息的覆盖面
+3. 质量一致性 (Quality Consistency): 整体信息质量的一致性
+4. 互补性 (Complementarity): 新旧信息的互补程度
+5. 实用价值 (Practical Value): 对报告生成的实际价值
+
+搜索结果总数: {data_count}条
+新增数据: {new_data_count}条
+搜索结果：
+{content_data}
+
+请给出改进后的评分和详细分析：
+
+```json
+{{
+    "depth_improvement": 7.2,
+    "coverage_expansion": 8.1,
+    "quality_consistency": 6.8,
+    "complementarity": 7.5,
+    "practical_value": 8.0,
+    "overall": 7.52,
+    "improvement_from_baseline": 1.2,
+    "analysis_details": {{
+        "depth_analysis": "深度改善分析",
+        "coverage_analysis": "覆盖面分析",
+        "consistency_check": "一致性检查",
+        "complementarity_assessment": "互补性评估",
+        "value_assessment": "价值评估",
+        "next_iteration_suggestions": ["下轮优化建议"]
+    }}
+}}
+```
+""",
+
+            # 最终报告质量评估
+            "final_report_quality": """
+请对生成的最终报告进行全面质量评估。
+
+报告主题: {topic}
+报告类型: {report_type}
+报告长度: {report_length}字符
+章节数量: {section_count}个
+
+评估维度：
+1. 内容准确性 (Content Accuracy): 信息的准确性和事实性 (0-10分)
+2. 结构合理性 (Structure Rationality): 报告结构的逻辑性和合理性 (0-10分)
+3. 信息完整性 (Information Completeness): 信息的全面性和深度 (0-10分)
+4. 可读性 (Readability): 语言表达和阅读体验 (0-10分)
+5. 实用价值 (Practical Value): 对读者的实际价值和指导意义 (0-10分)
+6. 创新洞察 (Innovative Insights): 独特见解和深度分析 (0-10分)
+
+报告内容：
+{report_content}
+
+请给出详细的质量评估：
+
+```json
+{{
+    "content_accuracy": 8.2,
+    "structure_rationality": 7.8,
+    "information_completeness": 8.5,
+    "readability": 7.9,
+    "practical_value": 8.1,
+    "innovative_insights": 7.3,
+    "overall": 7.97,
+    "analysis_details": {{
+        "accuracy_assessment": "准确性评估",
+        "structure_analysis": "结构分析",
+        "completeness_review": "完整性审查",
+        "readability_evaluation": "可读性评估",
+        "value_analysis": "价值分析",
+        "insight_evaluation": "洞察评估",
+        "strengths": ["报告优势"],
+        "weaknesses": ["改进空间"],
+        "recommendations": ["优化建议"]
+    }}
+}}
+```
+""",
+
             "quality_assessment": """
 请对以下搜索结果进行5维度质量评估。
 
@@ -247,7 +373,9 @@ class AnalysisMcp:
     def analyze_quality(self, 
                        data: Union[List[Document], List[Dict]], 
                        topic: str,
-                       analysis_aspects: List[str] = None) -> AnalysisResult:
+                       analysis_aspects: List[str] = None,
+                       evaluation_mode: str = "initial",
+                       **kwargs) -> AnalysisResult:
         """
         评估搜索结果的质量
         
@@ -255,53 +383,111 @@ class AnalysisMcp:
             data: 搜索结果数据
             topic: 分析主题
             analysis_aspects: 分析方面
+            evaluation_mode: 评估模式 ('initial', 'iterative', 'final_report')
+            **kwargs: 其他参数 (baseline_score, quality_threshold, iteration_count等)
             
         Returns:
             AnalysisResult: 质量分析结果
         """
         if not self.has_llm:
-            return self._fallback_quality_analysis(data, topic)
+            return self._fallback_quality_analysis(data, topic, evaluation_mode, **kwargs)
         
         try:
-            # 准备分析数据
-            content_data = self._prepare_content_for_analysis(data)
+            # 根据评估模式选择模板和系统提示
+            if evaluation_mode == "initial":
+                template_key = "initial_search_quality"
+                system_prompt = "你是一位专业的信息质量评估专家，擅长评估初始搜索结果的基础质量和覆盖面。请重点关注信息的相关性、可信度、完整性、时效性和多样性。"
+                
+            elif evaluation_mode == "iterative":
+                template_key = "iterative_quality"
+                system_prompt = "你是一位专业的迭代优化评估专家，擅长评估经过多轮优化后的信息质量改善情况。请重点关注相比基线的改进程度和实际价值提升。"
+                
+            elif evaluation_mode == "final_report":
+                template_key = "final_report_quality"
+                system_prompt = "你是一位专业的报告质量评估专家，擅长从多个维度全面评估最终报告的质量。请重点关注内容准确性、结构合理性、完整性、可读性、实用价值和创新洞察。"
+                
+            else:
+                # 默认使用通用质量评估
+                template_key = "quality_assessment"
+                system_prompt = "你是一位专业的信息质量评估专家，擅长从多个维度评估信息的质量和价值。"
             
-            # 使用质量评估模板
-            template = self.analysis_templates["quality_assessment"]
-            prompt = template.format(
-                topic=topic,
-                content_data=content_data
-            )
+            # 准备分析数据
+            if evaluation_mode == "final_report":
+                # 最终报告评估使用不同的数据格式
+                report_content = kwargs.get("report_content", str(data))
+                data_count = 1
+                # 构建模板参数
+                template_params = {
+                    "topic": topic,
+                    "report_content": report_content,
+                    "data_count": data_count
+                }
+            else:
+                content_data = self._prepare_content_for_analysis(data)
+                data_count = len(data) if isinstance(data, list) else 1
+                # 构建模板参数
+                template_params = {
+                    "topic": topic,
+                    "content_data": content_data,
+                    "data_count": data_count
+                }
+            
+            # 添加特定模式的参数
+            if evaluation_mode == "iterative":
+                template_params.update({
+                    "iteration_count": kwargs.get("iteration_count", 1),
+                    "baseline_score": kwargs.get("baseline_score", 0.0),
+                    "quality_threshold": kwargs.get("quality_threshold", 8.5),
+                    "new_data_count": kwargs.get("new_data_count", 0)
+                })
+            elif evaluation_mode == "final_report":
+                template_params.update({
+                    "report_type": kwargs.get("report_type", "综合报告"),
+                    "report_length": kwargs.get("report_length", len(report_content)),
+                    "section_count": kwargs.get("section_count", 0)
+                })
+            
+            # 使用选定的模板
+            template = self.analysis_templates[template_key]
+            prompt = template.format(**template_params)
             
             # 调用LLM进行分析
-            response = self.llm_processor.call_llm_api_json(
-                prompt,
-                "你是一位专业的信息质量评估专家，擅长从多个维度评估信息的质量和价值。"
-            )
+            response = self.llm_processor.call_llm_api_json(prompt, system_prompt)
             
             # 解析结果
             if isinstance(response, dict):
-                quality_score = QualityScore(
-                    relevance=response.get("relevance", 0.5),
-                    credibility=response.get("credibility", 0.5),
-                    completeness=response.get("completeness", 0.5),
-                    timeliness=response.get("timeliness", 0.5),
-                    overall=response.get("overall", 0.5)
-                )
+                overall_score = response.get("overall", 0.0)
+                
+                # 根据评估模式构建不同的结果
+                if evaluation_mode == "initial":
+                    reasoning = f"初始搜索质量评估：相关性{response.get('relevance', 0):.1f}, 可信度{response.get('credibility', 0):.1f}, 完整性{response.get('completeness', 0):.1f}, 时效性{response.get('timeliness', 0):.1f}, 多样性{response.get('diversity', 0):.1f}"
+                    
+                elif evaluation_mode == "iterative":
+                    improvement = response.get("improvement_from_baseline", 0)
+                    reasoning = f"迭代优化评估：总分{overall_score:.2f}/10，相比基线提升{improvement:.2f}分"
+                    
+                elif evaluation_mode == "final_report":
+                    reasoning = f"最终报告评估：准确性{response.get('content_accuracy', 0):.1f}, 结构{response.get('structure_rationality', 0):.1f}, 完整性{response.get('information_completeness', 0):.1f}, 可读性{response.get('readability', 0):.1f}, 价值{response.get('practical_value', 0):.1f}, 洞察{response.get('innovative_insights', 0):.1f}"
+                    
+                else:
+                    reasoning = f"质量评估完成，总分: {overall_score:.2f}"
                 
                 return AnalysisResult(
-                    analysis_type="quality_assessment",
-                    score=quality_score.overall,
+                    analysis_type=f"quality_assessment_{evaluation_mode}",
+                    score=overall_score,
                     details=response.get("analysis_details", {}),
-                    reasoning=f"5维度质量评估：相关性{quality_score.relevance:.2f}, 可信度{quality_score.credibility:.2f}, 完整性{quality_score.completeness:.2f}, 时效性{quality_score.timeliness:.2f}",
-                    metadata={"quality_score": quality_score.dict()}
+                    reasoning=reasoning,
+                    metadata={
+                        "evaluation_mode": evaluation_mode,
+                        "raw_scores": {k: v for k, v in response.items() if isinstance(v, (int, float))}
+                    }
                 )
             else:
                 raise ValueError("LLM返回格式不正确")
                 
         except Exception as e:
-            print(f"❌ 质量分析失败: {str(e)}")
-            return self._fallback_quality_analysis(data, topic)
+            print(f"❌ 质量分析失败 ({evaluation_mode}模式): {str(e)}")
+            return self._fallback_quality_analysis(data, topic, evaluation_mode, **kwargs)
     
     def analyze_relevance(self, 
                          content: Union[Document, Dict], 
@@ -589,19 +775,61 @@ class AnalysisMcp:
         return summary
     
     # 备用分析方法
-    def _fallback_quality_analysis(self, data, topic) -> AnalysisResult:
+    def _fallback_quality_analysis(self, data, topic, evaluation_mode="initial", **kwargs) -> AnalysisResult:
         """备用质量分析"""
-        if not data:
-            score = 0.0
+        data_count = len(data) if isinstance(data, list) else (1 if data else 0)
+        
+        if evaluation_mode == "initial":
+            # 初始搜索质量的启发式评分
+            if data_count == 0:
+                score = 0.0
+            elif data_count < 3:
+                score = 3.0  # 数据太少
+            elif data_count < 8:
+                score = 5.5  # 数据一般
+            else:
+                score = 7.0  # 数据充足
+            
+            reasoning = f"初始搜索备用评估：基于{data_count}条数据的启发式评分"
+            
+        elif evaluation_mode == "iterative":
+            # 迭代优化的启发式评分
+            baseline_score = kwargs.get("baseline_score", 0.0)
+            new_data_count = kwargs.get("new_data_count", 0)
+            
+            # 基于新增数据量计算改进
+            improvement = min(new_data_count * 0.3, 2.0)  # 每条新数据最多提升0.3分，最多提升2分
+            score = min(baseline_score + improvement, 10.0)
+            
+            reasoning = f"迭代优化备用评估：基线{baseline_score:.1f}分，新增{new_data_count}条数据，提升{improvement:.1f}分"
+            
+        elif evaluation_mode == "final_report":
+            # 最终报告的启发式评分
+            report_length = kwargs.get("report_length", 0)
+            section_count = kwargs.get("section_count", 0)
+            
+            # 基于报告长度和章节数评分
+            length_score = min(report_length / 1000, 5.0)  # 每1000字符1分，最多5分
+            structure_score = min(section_count * 0.8, 3.0)  # 每章节0.8分，最多3分
+            base_score = 2.0  # 基础分
+            
+            score = length_score + structure_score + base_score
+            reasoning = f"最终报告备用评估：长度{report_length}字符({length_score:.1f}分)，{section_count}个章节({structure_score:.1f}分)"
+            
         else:
-            # 简单的启发式评分
-            score = min(0.5 + len(data) * 0.1, 1.0)
+            # 默认评估
+            score = min(0.5 + data_count * 0.1, 1.0) * 10  # 转换为10分制
+            reasoning = f"备用质量评估，基于数据数量: {data_count}条"
         
         return AnalysisResult(
-            analysis_type="quality_assessment",
+            analysis_type=f"quality_assessment_{evaluation_mode}",
             score=score,
-            details={"method": "fallback", "data_count": len(data) if data else 0},
-            reasoning=f"备用质量评估，基于数据数量: {len(data) if data else 0}条"
+            details={
+                "method": "fallback", 
+                "data_count": data_count,
+                "evaluation_mode": evaluation_mode
+            },
+            reasoning=reasoning
         )
     
     def _fallback_relevance_analysis(self, content, topic) -> AnalysisResult:
@@ -685,4 +913,4 @@ class AnalysisMcp:
             score=coverage_score,
             details={"gaps": gaps, "data_count": data_count, "method": "simple_count_based"},
             reasoning=f"基于数据量的简单缺口分析，覆盖率: {coverage_score:.1f}"
-        ) 
+        )

@@ -14,13 +14,17 @@ class ArticleAnalyzer:
     def analyze_single_article(self, item: Dict, topic: str) -> str:
         """分析单篇文章"""
         try:
+            content_to_analyze = item.get('full_content') or item.get('summary', '')
+            if len(content_to_analyze) < 50: # If content is too short, use summary
+                content_to_analyze = item.get('summary', '')
+
             if item["is_academic"]:
                 analysis_prompt = f"""
                 请对以下{topic}领域的学术论文进行深度分析，突出其创新点、方法论和潜在影响。
                 
                 标题: {item['title']}
                 作者: {', '.join(item['authors'])}
-                摘要: {item['summary']}
+                内容: {content_to_analyze}
                 来源: {item['source']}
                 相关性: {item.get('relevance_score', '未评分')}
                 论文类型: {item.get('research_type', '未分类')}
@@ -49,7 +53,7 @@ class ArticleAnalyzer:
                 请对以下{topic}领域的研究见解进行分析和评估，提取关键信息并讨论其在领域中的意义。
                 
                 标题: {item['title']}
-                内容概要: {item['summary']}
+                内容: {content_to_analyze}
                 来源: {item['source']}
                 
                 分析要求:
@@ -92,7 +96,7 @@ class ArticleAnalyzer:
 
 **{'作者: ' + ', '.join(item['authors']) + ' | ' if item['is_academic'] else ''}发布日期: {item['published']} | 来源: {item['source']}**
 
-{item['summary']}
+{item.get('full_content') or item.get('summary', '')}
 
 **链接**: [{item['url']}]({item['url']})
 """
@@ -121,16 +125,17 @@ class ArticleAnalyzer:
                     completed_analyses[original_index] = analysis_result
                 except Exception as e:
                     item = future_to_item[future]
+                    error_message = f"文章分析任务失败: {item.get('title', '未知标题')} - {str(e)}"
                     with self.lock:
-                        print(f"文章分析任务失败: {item.get('title', '未知标题')} - {str(e)}")
-                    # 添加基本分析
+                        print(error_message)
+                    # 添加包含错误信息的分析
                     original_index = analysis_items.index(item)
                     completed_analyses[original_index] = f"""
 ## {item['title']}
 
-**{'作者: ' + ', '.join(item['authors']) + ' | ' if item['is_academic'] else ''}发布日期: {item['published']} | 来源: {item['source']}**
+**分析错误**: {error_message}
 
-{item['summary']}
+**摘要**: {item.get('summary', '无可用摘要')}
 
 **链接**: [{item['url']}]({item['url']})
 """
@@ -153,4 +158,4 @@ class ArticleAnalyzer:
 """)
         
         print(f"文章分析完成，共处理 {len(article_analyses)} 篇文章")
-        return article_analyses 
+        return article_analyses

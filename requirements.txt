@@ -9,4 +9,7 @@ markdownify==0.11.6
 pandas==2.1.0
 tqdm==4.66.1
 feedparser==6.0.10
-python-dateutil==2.8.2 
+python-dateutil==2.8.2
+fastmcp==0.2.0
+fastapi==0.104.1
+uvicorn==0.24.0 

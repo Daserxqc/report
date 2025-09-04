@@ -12,7 +12,10 @@ from dotenv import load_dotenv
 load_dotenv()
 
 # 导入SearchMcp
-from collectors.search_mcp import SearchMcp, Document
+import sys
+import os
+sys.path.append(os.path.join(os.path.dirname(__file__), 'search_mcp', 'src'))
+from search_mcp.models import Document
 
 
 def test_basic_search():
@@ -247,4 +250,4 @@ def main():
 
 
 if __name__ == "__main__":
-    main() 
+    main()

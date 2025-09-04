@@ -138,7 +138,8 @@ class CollectorInitializationAgent(BaseSearchAgent):
         # Tavily收集器
         if self.config.has_api_key('tavily'):
             try:
-                tavily = TavilyCollector()
+                # 传递API密钥给TavilyCollector
+                tavily = TavilyCollector(api_key=self.config.tavily_api_key)
                 if hasattr(tavily, 'has_api_key') and tavily.has_api_key:
                     self.collectors['tavily'] = tavily
                     self.logger.logger.info("✅ Tavily收集器已启用")
@@ -148,7 +149,8 @@ class CollectorInitializationAgent(BaseSearchAgent):
         # Brave收集器
         if self.config.has_api_key('brave'):
             try:
-                brave = BraveSearchCollector()
+                # 传递API密钥给BraveSearchCollector
+                brave = BraveSearchCollector(api_key=self.config.brave_search_api_key)
                 if hasattr(brave, 'has_api_key') and brave.has_api_key:
                     self.collectors['brave'] = brave
                     self.logger.logger.info("✅ Brave收集器已启用")
@@ -158,7 +160,11 @@ class CollectorInitializationAgent(BaseSearchAgent):
         # Google收集器
         if self.config.has_api_key('google'):
             try:
-                google = GoogleSearchCollector()
+                # 传递API密钥给GoogleSearchCollector
+                google = GoogleSearchCollector(
+                    api_key=self.config.google_search_api_key,
+                    cx=self.config.google_search_cx
+                )
                 if hasattr(google, 'has_api_key') and google.has_api_key:
                     self.collectors['google'] = google
                     self.logger.logger.info("✅ Google收集器已启用")
@@ -620,4 +626,4 @@ class SearchOrchestrator:
 
 
 # For backward compatibility - 为了保持向后兼容性
-SearchGenerator = SearchOrchestrator 
+SearchGenerator = SearchOrchestrator

@@ -823,4 +823,4 @@ class MasterMcp:
     
     def get_available_task_types(self) -> List[str]:
         """获取可用的任务类型"""
-        return [task_type.value for task_type in TaskType] 
+        return [task_type.value for task_type in TaskType]

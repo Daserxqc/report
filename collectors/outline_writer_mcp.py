@@ -2,6 +2,9 @@ import json
 from typing import List, Dict, Optional, Union
 from dataclasses import dataclass
 from collectors.llm_processor import LLMProcessor
+import sys
+import os
+sys.path.append(os.path.join(os.path.dirname(__file__), '..', 'search_mcp', 'src'))
 from collectors.search_mcp import Document
 
 
@@ -353,14 +356,55 @@ class OutlineWriterMcp:
             prompt = template.format(**template_params)
             
             # 调用LLM生成大纲
+            enhanced_system_message = f"""你是一位专业的{report_type}专家，擅长创建逻辑清晰、结构合理的报告大纲。
+
+重要：你必须严格按照以下JSON格式返回结果，不允许任何偏差：
+{{
+    "title": "大纲总标题",
+    "level": 0,
+    "order": 0,
+    "description": "大纲总体描述",
+    "subsections": [
+        {{
+            "title": "主章节标题",
+            "level": 1,
+            "order": 1,
+            "description": "章节描述和目标",
+            "key_points": ["关键点1", "关键点2"],
+            "estimated_length": "800-1000字",
+            "subsections": [
+                {{
+                    "title": "子章节标题",
+                    "level": 2,
+                    "order": 1,
+                    "description": "子章节描述",
+                    "key_points": ["子要点1", "子要点2"],
+                    "estimated_length": "300-400字",
+                    "subsections": []
+                }}
+            ]
+        }}
+    ]
+}}
+
+绝对不允许使用其他格式，如academic_report_outline、technical_report_outline等嵌套结构。"""
+            
             response = self.llm_processor.call_llm_api_json(
                 prompt,
-                f"你是一位专业的{report_type}专家，擅长创建逻辑清晰、结构合理的报告大纲。请确保输出严格遵循JSON格式。"
+                enhanced_system_message
             )
+            
+            # 调试：打印LLM响应
+            print(f"🔍 LLM响应类型: {type(response)}")
+            print(f"🔍 LLM响应内容: {response}")
             
             # 解析并验证响应
             if isinstance(response, dict):
                 outline = self._parse_outline_response(response)
+                print(f"🔍 解析后的大纲标题: {outline.title}")
+                print(f"🔍 解析后的主章节数量: {len(outline.subsections)}")
+                if outline.subsections:
+                    print(f"🔍 第一个主章节: {outline.subsections[0].title}")
                 print(f"✅ 大纲创建完成，包含{len(outline.subsections)}个主章节")
                 return outline
             else:
@@ -410,21 +454,157 @@ class OutlineWriterMcp:
             
             return node
         
-        return parse_node(response)
+        # 处理不同的响应格式
+        actual_data = response
+        
+        # 如果响应包含嵌套的大纲结构，提取实际数据
+        for key in response.keys():
+            if 'outline' in key.lower():
+                actual_data = response[key]
+                break
+        
+        # 通用格式转换：检查是否需要转换为标准格式
+        needs_conversion = False
+        
+        # 检查是否为学术报告格式或其他复杂格式
+        if not ('subsections' in actual_data or 'sections' in actual_data):
+            # 如果没有标准的subsections或sections字段，检查是否有其他章节结构
+            section_keys = []
+            for key, value in actual_data.items():
+                if key not in ['title', 'description', 'total_estimated_length'] and isinstance(value, dict):
+                    # 检查是否包含章节特征（title, description, key_points等）
+                    if any(field in value for field in ['title', 'description', 'key_points', 'subsections', 'subchapters']):
+                        section_keys.append(key)
+            
+            if section_keys:
+                needs_conversion = True
+                print(f"🔍 检测到复杂格式，包含章节: {section_keys}，正在转换...")
+                
+                converted_data = {
+                    "title": actual_data.get("title", "未命名节点"),
+                    "level": 0,
+                    "order": 0,
+                    "description": actual_data.get("description", ""),
+                    "subsections": []
+                }
+                
+                # 转换各部分为subsections
+                section_order = 1
+                for key in section_keys:
+                    section_data = actual_data[key]
+                    if isinstance(section_data, dict):
+                        section_node = {
+                            "title": section_data.get("title", key.replace('_', ' ').title()),
+                            "level": 1,
+                            "order": section_order,
+                            "description": section_data.get("description", ""),
+                            "key_points": section_data.get("key_points", []),
+                            "estimated_length": section_data.get("estimated_length", section_data.get("length", "")),
+                            "subsections": []
+                        }
+                        
+                        # 处理子章节（可能是subchapters或subsections）
+                        subchapters = section_data.get("subchapters", section_data.get("subsections", []))
+                        for j, subchapter in enumerate(subchapters):
+                            if isinstance(subchapter, dict):
+                                sub_node = {
+                                    "title": subchapter.get("title", f"子章节{j+1}"),
+                                    "level": 2,
+                                    "order": j + 1,
+                                    "description": subchapter.get("description", ""),
+                                    "key_points": subchapter.get("key_points", []),
+                                    "estimated_length": subchapter.get("estimated_length", subchapter.get("length", "")),
+                                    "subsections": []
+                                }
+                                section_node["subsections"].append(sub_node)
+                            elif isinstance(subchapter, str):
+                                # 如果是字符串，转换为节点格式
+                                sub_node = {
+                                    "title": subchapter,
+                                    "level": 2,
+                                    "order": j + 1,
+                                    "description": "",
+                                    "key_points": [],
+                                    "estimated_length": "",
+                                    "subsections": []
+                                }
+                                section_node["subsections"].append(sub_node)
+                        
+                        converted_data["subsections"].append(section_node)
+                        section_order += 1
+                
+                actual_data = converted_data
+        
+        # 如果是旧格式（sections数组），转换为新格式
+        if 'sections' in actual_data and 'subsections' not in actual_data:
+            print("🔍 检测到旧格式，正在转换...")
+            converted_data = {
+                "title": actual_data.get("title", "未命名节点"),
+                "level": 0,
+                "order": 0,
+                "description": actual_data.get("description", ""),
+                "subsections": []
+            }
+            
+            # 转换sections为subsections
+            sections = actual_data.get("sections", [])
+            for i, section in enumerate(sections):
+                if isinstance(section, dict):
+                    section_node = {
+                        "title": section.get("section_title", section.get("title", f"章节{i+1}")),
+                        "level": 1,
+                        "order": i + 1,
+                        "description": section.get("description", ""),
+                        "key_points": section.get("key_points", []),
+                        "estimated_length": section.get("estimated_length", ""),
+                        "subsections": []
+                    }
+                    
+                    # 处理子章节
+                    subsections = section.get("subsections", [])
+                    for j, subsection in enumerate(subsections):
+                        if isinstance(subsection, str):
+                            # 如果是字符串，转换为节点格式
+                            sub_node = {
+                                "title": subsection,
+                                "level": 2,
+                                "order": j + 1,
+                                "description": "",
+                                "key_points": [],
+                                "estimated_length": "",
+                                "subsections": []
+                            }
+                            section_node["subsections"].append(sub_node)
+                        elif isinstance(subsection, dict):
+                            section_node["subsections"].append(subsection)
+                    
+                    converted_data["subsections"].append(section_node)
+            
+            actual_data = converted_data
+        
+        return parse_node(actual_data)
     
     def _summarize_reference_data(self, reference_data: List[Union[Document, Dict]]) -> str:
         """总结参考数据"""
         if not reference_data:
             return "无参考数据"
         
+        # 确保reference_data是列表类型
+        if not isinstance(reference_data, list):
+            print(f"⚠️ reference_data不是列表类型: {type(reference_data)}")
+            return "参考数据格式错误"
+        
         summaries = []
-        for i, item in enumerate(reference_data[:5]):  # 限制前5个
+        # 安全地获取前5个元素
+        limited_data = reference_data[:5] if len(reference_data) > 5 else reference_data
+        for i, item in enumerate(limited_data):
             if isinstance(item, Document):
-                summary = f"[{i+1}] {item.title} - {item.content[:100]}..."
+                content = str(item.content) if item.content else ""
+                summary = f"[{i+1}] {item.title} - {content[:100]}..."
             elif isinstance(item, dict):
                 title = item.get("title", f"文档{i+1}")
-                content = item.get("content", "")[:100]
-                summary = f"[{i+1}] {title} - {content}..."
+                content = str(item.get("content", "")) if item.get("content") else ""
+                summary = f"[{i+1}] {title} - {content[:100]}..."
             summaries.append(summary)
         
         return "\n".join(summaries)
@@ -680,4 +860,4 @@ class OutlineWriterMcp:
             )
             root.subsections.append(section)
         
-        return root 
+        return root
