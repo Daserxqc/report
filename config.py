@@ -16,7 +16,7 @@ IEEE_API_KEY = os.getenv("IEEE_API_KEY")
 # Google Search API settings
 GOOGLE_SEARCH_API_KEY = os.getenv("GOOGLE_SEARCH_API_KEY")
 GOOGLE_SEARCH_CX = os.getenv("GOOGLE_SEARCH_CX")  # Custom Search Engine ID
-GOOGLE_SEARCH_ENABLED = False  # 暂时禁用Google搜索以避免429错误
+GOOGLE_SEARCH_ENABLED = True  # 暂时禁用Google搜索以避免429错误
 
 # Brave Search API settings
 BRAVE_SEARCH_API_KEY = os.getenv("BRAVE_SEARCH_API_KEY", "BSA4bcKQe6t46PvsVgwVmTNSSvynmbI")
