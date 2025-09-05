@@ -503,11 +503,15 @@ class IntelligentReportAgent:
                     end = line.rfind('"')
                     if start > 0 and end > start:
                         query = line[start:end].strip()
+                        # 简化查询字符串，移除复杂的引号和特殊字符
+                        query = self._simplify_query(query)
                         if query:
                             queries.append(query)
                 # 如果没有引号，提取冒号后的内容
                 elif ':' in line:
                     query = line.split(':', 1)[1].strip()
+                    # 简化查询字符串
+                    query = self._simplify_query(query)
                     if query:
                         queries.append(query)
         
@@ -517,9 +521,35 @@ class IntelligentReportAgent:
                 line = line.strip()
                 if line and not line.startswith('缺口') and not line.startswith('Gap'):
                     if len(line) > 5 and len(line) < 100:  # 合理的查询长度
-                        queries.append(line)
+                        # 简化查询字符串
+                        query = self._simplify_query(line)
+                        if query:
+                            queries.append(query)
         
         return queries[:5]  # 最多返回5个查询
+    
+    def _simplify_query(self, query):
+        """简化查询字符串，移除复杂的引号和特殊字符"""
+        if not query:
+            return query
+        
+        # 移除多余的引号
+        query = query.replace('"', '').replace("'", '')
+        
+        # 移除复杂的特殊字符组合
+        query = query.replace('site:', '')
+        query = query.replace('round', '')
+        query = query.replace('B轮', 'B轮融资')
+        query = query.replace('C轮', 'C轮融资')
+        
+        # 移除多余的空格
+        query = ' '.join(query.split())
+        
+        # 限制查询长度
+        if len(query) > 50:
+            query = query[:50]
+        
+        return query
     
     def _fallback_targeted_search(self, topic, days=7):
         """当LLM不可用时的备用搜索策略 - 增强版，专注重大事件"""
@@ -530,21 +560,21 @@ class IntelligentReportAgent:
         end_date = today
         start_date = today - timedelta(days=days)
         
-        # 重大事件专用查询
+        # 重大事件专用查询 - 简化版本
         major_event_queries = [
-            f"{topic} 重大事件 突发 {today.year}年 最新 breaking news major event",
-            f"{topic} 行业震动 重磅消息 {today.year} 最近{days}天 industry shock major news",
-            f"{topic} 并购 收购 合并 {today.year}年 最新 merger acquisition latest",
-            f"{topic} 重大发布 产品发布 {today.year} 最新 major launch product release",
-            f"{topic} 监管 政策变化 {today.year}年 最新 regulation policy change latest"
+            f"{topic} 重大事件 {today.year}年",
+            f"{topic} 行业震动 {today.year}年",
+            f"{topic} 并购收购 {today.year}年",
+            f"{topic} 产品发布 {today.year}年",
+            f"{topic} 政策变化 {today.year}年"
         ]
         
-        # 通用补充查询
+        # 通用补充查询 - 简化版本
         general_queries = [
-            f"{topic} {today.year}年最新发展 recent developments latest {days} days",
-            f"{topic} industry news {today.strftime('%B %Y')} latest recent {days} days",
-            f"{topic} 行业动态 {today.year} 新闻 trends 最近{days}天",
-            f"{topic} 争议 质疑 风险 挑战 {today.year}年 不同观点 criticism"
+            f"{topic} {today.year}年最新发展",
+            f"{topic} 行业动态 {today.year}年",
+            f"{topic} 技术创新 {today.year}年",
+            f"{topic} 市场趋势 {today.year}年"
         ]
         
         # 合并所有查询，重大事件查询优先

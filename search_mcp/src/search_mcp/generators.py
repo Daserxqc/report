@@ -156,7 +156,7 @@ class CollectorInitializationAgent(BaseSearchAgent):
                 self.logger.logger.error(f"⚠️ Brave收集器初始化失败: {str(e)}")
         
         # Google收集器
-        if self.config.has_api_key('google'):
+        if self.config.has_api_key('google') and getattr(self.config, 'GOOGLE_SEARCH_ENABLED', True):
             try:
                 google = GoogleSearchCollector()
                 if hasattr(google, 'has_api_key') and google.has_api_key:
@@ -164,6 +164,8 @@ class CollectorInitializationAgent(BaseSearchAgent):
                     self.logger.logger.info("✅ Google收集器已启用")
             except Exception as e:
                 self.logger.logger.error(f"⚠️ Google收集器初始化失败: {str(e)}")
+        else:
+            self.logger.logger.info("⚠️ Google收集器已禁用")
     
     def _init_academic_collectors(self):
         """初始化学术搜索收集器"""

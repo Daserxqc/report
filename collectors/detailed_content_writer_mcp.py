@@ -1,7 +1,10 @@
 from typing import List, Dict, Optional, Union
 from dataclasses import dataclass
 from collectors.llm_processor import LLMProcessor
-from collectors.search_mcp import Document
+import sys
+import os
+sys.path.append(os.path.join(os.path.dirname(__file__), '..', 'search_mcp', 'src'))
+from search_mcp.models import Document
 from collectors.outline_writer_mcp import OutlineNode
 
 
