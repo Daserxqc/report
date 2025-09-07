@@ -11,13 +11,14 @@ class LLMProcessor:
     使用大模型处理和总结搜索结果，生成结构化的报告内容
     """
     
-    def __init__(self, api_key=None, model=None):
+    def __init__(self, api_key=None, model=None, reporter=None):
         """
         初始化LLM处理器
         
         Args:
             api_key (str, optional): API密钥，默认从config获取
             model (str, optional): 使用的模型名称，默认从config获取
+            reporter (StreamingProgressReporter, optional): 进度报告器
         """
         # 配置API密钥和URL
         self.api_key = api_key or getattr(config, "OPENAI_API_KEY", None)
@@ -36,6 +37,10 @@ class LLMProcessor:
         
         # 使用 dashscope API
         self.model = "deepseek-v3"
+        
+        # 用量跟踪
+        self.last_usage = None
+        self.reporter = reporter
             
         # print(f"LLM处理器已初始化，使用的模型: {self.model}, API URL: {self.base_url}")  # MCP需要静默
         
@@ -54,9 +59,12 @@ class LLMProcessor:
         Returns:
             str: 生成的内容
         """
+        # 每次调用前清空上次用量，防止上游未返回usage时复用旧值
+        self.last_usage = None
+        
         if not self.api_key:
             raise ValueError("API密钥未提供，无法调用LLM API")
-            
+        
         try:
             # 构建消息
             messages = []
@@ -83,6 +91,28 @@ class LLMProcessor:
                 
                 if hasattr(response, 'choices') and len(response.choices) > 0:
                     result = response.choices[0].message.content
+                    
+                    # 跟踪用量信息（仅在上游提供时设置）
+                    if hasattr(response, 'usage'):
+                        usage = response.usage
+                        self.last_usage = {
+                            'provider': 'openai',
+                            'model': self.model,
+                            'input_tokens': getattr(usage, 'prompt_tokens', 0),
+                            'output_tokens': getattr(usage, 'completion_tokens', 0),
+                            'total_tokens': getattr(usage, 'total_tokens', 0)
+                        }
+                        
+                        # 报告模型用量给StreamingProgressReporter
+                        if self.reporter:
+                            self.reporter.report_model_usage(
+                                model_provider='openai',
+                                model_name=self.model,
+                                input_tokens=self.last_usage['input_tokens'],
+                                output_tokens=self.last_usage['output_tokens'],
+                                cost_estimate=self._calculate_cost(self.last_usage)
+                            )
+                    
                     # 检查结果是否可能被截断
                     if result.endswith("...") or (len(result) > 100 and len(result) >= 0.95 * max_tokens):
                         print(f"警告: 生成的内容可能被截断 (长度:{len(result)})。考虑增加max_tokens值。")
@@ -113,6 +143,18 @@ class LLMProcessor:
                 result = response.json()
                 if "choices" in result and len(result["choices"]) > 0:
                     content = result["choices"][0]["message"]["content"]
+                    
+                    # 跟踪用量信息（仅在上游提供时设置）
+                    if "usage" in result:
+                        usage = result["usage"]
+                        self.last_usage = {
+                            'provider': 'openai',
+                            'model': self.model,
+                            'input_tokens': usage.get('prompt_tokens', 0),
+                            'output_tokens': usage.get('completion_tokens', 0),
+                            'total_tokens': usage.get('total_tokens', 0)
+                        }
+                    
                     # 检查结果是否可能被截断
                     if content.endswith("...") or (len(content) > 100 and len(content) >= 0.95 * max_tokens):
                         print(f"警告: 生成的内容可能被截断 (长度:{len(content)})。考虑增加max_tokens值。")
@@ -482,4 +524,4 @@ class LLMProcessor:
         response_text = self.call_llm_api(prompt, system_message, temperature, max_tokens)
         
         # 处理并解析响应为JSON
-        return self.process_json_response(response_text) 
+        return self.process_json_response(response_text)

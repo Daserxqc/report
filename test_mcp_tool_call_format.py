@@ -148,7 +148,7 @@ class MCPToolCallTester:
         
         try:
             # 设置超时时间，避免长时间等待
-            timeout = aiohttp.ClientTimeout(total=3000)  # 10分钟超时
+            timeout = aiohttp.ClientTimeout(total=3600)  # 10分钟超时
             async with self.session.post(
                 f"{self.base_url}/mcp/tools/call",
                 json=request_data,

@@ -1128,8 +1128,18 @@ def content_writer_mcp(section_title: str, content_data: List[Dict], overall_rep
         # 格式化prompt
         prompt = template.format(**template_params)
         
-        # 计算token限制
-        max_tokens = min(int(word_count_requirement.split("-")[1].replace("字", "")) * 2 if "-" in word_count_requirement else 2000, 4000)
+        # 计算token限制（放宽上限，允许通过kwargs覆盖）
+        try:
+            upper = int(word_count_requirement.split("-")[1].replace("字", "")) if "-" in word_count_requirement else int(word_count_requirement.replace("字", ""))
+        except Exception:
+            upper = 2000
+        requested = int(kwargs.get("max_tokens", upper * 2))
+        try:
+            import config as _cfg
+            cap = getattr(_cfg, "LLM_MAX_TOKENS", 8000)
+        except Exception:
+            cap = 8000
+        max_tokens = min(requested, cap)
         
         # 调用LLM生成内容
         print(f"🔍 [content_writer_mcp] 准备调用LLM API，max_tokens: {max_tokens}")
@@ -1147,8 +1157,18 @@ def content_writer_mcp(section_title: str, content_data: List[Dict], overall_rep
         processed_content = _post_process_content(content, include_citations)
         print(f"🔍 [content_writer_mcp] 后处理完成，最终内容长度: {len(processed_content)}")
         
+        # 获取usage信息
+        usage_info = llm_processor.last_usage if hasattr(llm_processor, 'last_usage') else None
+        print(f"🔍 [content_writer_mcp] 获取到usage信息: {usage_info}")
+        
         print(f"🔍 [content_writer_mcp] 准备返回结果...")
-        return processed_content
+        
+        # 返回内容和usage信息的字典
+        result = {
+            "content": processed_content,
+            "usage": usage_info
+        }
+        return json.dumps(result, ensure_ascii=False)
         
     except Exception as e:
         print(f"❌ [content_writer_mcp] 章节'{section_title}'撰写失败: {str(e)}")
@@ -1818,74 +1838,61 @@ def generate_insight_report(request: Dict[str, Any]) -> str:
         return f"洞察报告生成过程中发生错误: {str(e)}"
 
 @mcp.tool()
-def generate_industry_dynamic_report(request: Dict[str, Any]) -> str:
-    """Generate industry dynamic report based on request parameters
+def generate_industry_dynamic_report(industry: str, time_range: str = "recent", focus_areas: List[str] = None, include_analysis: bool = True, data_sources: List[str] = None, **kwargs) -> str:
+    """Generate industry dynamic report based on parameters
     
     Args:
-        request: Request parameters containing industry, time_range, focus_areas, etc.
+        industry: Target industry for the report
+        time_range: Time range for analysis (recent, 1month, 3months, etc.)
+        focus_areas: List of focus areas for the report
+        include_analysis: Whether to include detailed analysis
+        data_sources: List of data sources to use
+        **kwargs: Additional parameters
         
     Returns:
         str: Generated industry dynamic report content
     """
     try:
-        industry = request.get("industry", "未指定行业")
-        time_range = request.get("time_range", "recent")
-        focus_areas = request.get("focus_areas", ["市场趋势", "技术创新", "政策影响", "竞争格局"])
-        include_analysis = request.get("include_analysis", True)
-        data_sources = request.get("data_sources", ["news", "research", "market_data"])
-        
+        if focus_areas is None:
+            focus_areas = ["市场趋势", "技术创新", "政策影响", "竞争格局"]
+        if data_sources is None:
+            data_sources = ["news", "research", "market_data"]
+            
         print(f"🏭 生成行业动态报告: {industry}")
         print(f"📅 时间范围: {time_range}, 关注领域: {focus_areas}")
         
-        # 使用流式orchestrator生成报告，但收集所有消息
-        import asyncio
-        from streaming_orchestrator import StreamingOrchestrator
+        # 使用orchestrator_mcp生成行业动态报告
+        task_description = f"生成{industry}行业动态报告，时间范围：{time_range}，关注领域：{focus_areas}，包含分析：{include_analysis}，数据源：{data_sources}"
         
-        async def collect_messages():
-            orchestrator = StreamingOrchestrator()
-            messages = []
-            async for message in orchestrator.generate_industry_dynamic_report(request):
-                messages.append(message)
-            return messages
+        result = orchestrator_mcp(task_description, task_type="industry_report")
+        result_data = json.loads(result)
         
-        # 运行异步函数
-        messages = asyncio.run(collect_messages())
-        
-        # 提取最终报告内容
-        final_content = ""
-        for message in messages:
-            if message.startswith("data: "):
-                try:
-                    data = json.loads(message[6:])
-                    if data.get("type") == "content":
-                        final_content += data.get("content", "")
-                except:
-                    pass
-        
-        return final_content if final_content else "报告生成完成，但内容为空"
+        if result_data.get("status") == "completed":
+            return result_data.get("report_content", "报告生成失败")
+        else:
+            return f"行业动态报告生成失败: {result_data.get('error', '未知错误')}"
             
     except Exception as e:
         print(f"❌ 行业动态报告生成过程中发生错误: {str(e)}")
         return f"行业动态报告生成失败: {str(e)}"
 
 @mcp.tool()
-def generate_academic_research_report(request: Dict[str, Any]) -> str:
-    """Generate academic research report based on request parameters
+def generate_academic_research_report(research_topic: str, academic_level: str = "advanced", research_methodology: str = "comprehensive", include_literature_review: bool = True, citation_style: str = "academic", max_pages: int = 20, **kwargs) -> str:
+    """Generate academic research report based on parameters
     
     Args:
-        request: Request parameters containing research_topic, academic_level, etc.
+        research_topic: Research topic for the report
+        academic_level: Academic level (basic, intermediate, advanced)
+        research_methodology: Research methodology approach
+        include_literature_review: Whether to include literature review
+        citation_style: Citation style to use
+        max_pages: Maximum number of pages
+        **kwargs: Additional parameters
         
     Returns:
         str: Generated academic research report content
     """
     try:
-        research_topic = request.get("research_topic", "未指定研究主题")
-        academic_level = request.get("academic_level", "advanced")
-        research_methodology = request.get("research_methodology", "comprehensive")
-        include_literature_review = request.get("include_literature_review", True)
-        citation_style = request.get("citation_style", "academic")
-        max_pages = request.get("max_pages", 20)
-        
         print(f"🎓 生成学术研究报告: {research_topic}")
         print(f"📚 学术级别: {academic_level}, 研究方法: {research_methodology}")
         
@@ -2117,22 +2124,7 @@ async def tools_call(request: dict):
         print(f"🔧 调用工具: {tool_name}")
         print(f"📋 参数: {arguments}")
         
-        # 特殊处理行业动态报告 - 使用流式调度器
-        if tool_name == "generate_industry_dynamic_report":
-            from streaming_orchestrator import StreamingOrchestrator
-            streaming_orchestrator = StreamingOrchestrator()
-            streaming_orchestrator.request_id = request_id
-            
-            # 直接返回流式响应
-            return StreamingResponse(
-                streaming_orchestrator.stream_industry_dynamic_report(arguments),
-                media_type="text/plain",
-                headers={
-                    "Cache-Control": "no-cache",
-                    "Connection": "keep-alive",
-                    "Content-Type": "text/event-stream"
-                }
-            )
+        # 移除特殊处理，统一使用标准MCP工具调用
         
         # 返回SSE格式的响应
         async def generate_sse_response():
@@ -2156,7 +2148,11 @@ async def tools_call(request: dict):
                 },
                 "jsonrpc": "2.0"
             }
-            yield f"data: {json.dumps(start_message, ensure_ascii=False)}\n\n"
+            try:
+                yield f"data: {json.dumps(start_message, ensure_ascii=False)}\n\n"
+            except (GeneratorExit, asyncio.CancelledError, BrokenPipeError, ConnectionResetError) as e:
+                print(f"🔌 [SSE] 连接在发送开始消息时关闭/取消: {e} (id={request_id}, tool={tool_name})")
+                return
             
             # 发送进度更新消息
             progress_message = {
@@ -2178,97 +2174,160 @@ async def tools_call(request: dict):
                 },
                 "jsonrpc": "2.0"
             }
-            yield f"data: {json.dumps(progress_message, ensure_ascii=False)}\n\n"
+            try:
+                yield f"data: {json.dumps(progress_message, ensure_ascii=False)}\n\n"
+            except (GeneratorExit, asyncio.CancelledError, BrokenPipeError, ConnectionResetError) as e:
+                print(f"🔌 [SSE] 连接在发送进度消息时关闭/取消: {e} (id={request_id}, tool={tool_name})")
+                return
             
             # 根据工具名称调用相应的函数
             result = None
-            
-            if tool_name == "generate_insight_report":
-                result = generate_insight_report(arguments.get("request", {}))
-            elif tool_name == "generate_academic_research_report":
-                result = generate_academic_research_report(arguments.get("request", {}))
-            elif tool_name == "comprehensive_search":
-                result = comprehensive_search(
-                    arguments.get("topic", ""),
-                    arguments.get("search_type", "comprehensive"),
-                    arguments.get("max_results", 10),
-                    arguments.get("days", 30),
-                    arguments.get("sources", ["web", "academic", "news"])
-                )
-            elif tool_name == "search":
-                result = search(
-                    arguments.get("query", ""),
-                    arguments.get("max_results", 5)
-                )
-            elif tool_name == "parallel_search":
-                result = parallel_search(
-                    arguments.get("queries", []),
-                    arguments.get("max_results", 3)
-                )
-            elif tool_name == "analysis_mcp":
-                result = analysis_mcp(
-                    arguments.get("analysis_type", "quality"),
-                    arguments.get("data", []),
-                    arguments.get("topic", ""),
-                    **arguments.get("kwargs", {})
-                )
-            elif tool_name == "query_generation_mcp":
-                result = query_generation_mcp(
-                    arguments.get("topic", ""),
-                    arguments.get("strategy", "initial"),
-                    arguments.get("context", ""),
-                    **arguments.get("kwargs", {})
-                )
-            elif tool_name == "outline_writer_mcp":
-                result = outline_writer_mcp(
-                    arguments.get("topic", ""),
-                    arguments.get("report_type", "comprehensive"),
-                    arguments.get("user_requirements", ""),
-                    **arguments.get("kwargs", {})
-                )
-            elif tool_name == "summary_writer_mcp":
-                result = summary_writer_mcp(
-                    arguments.get("content_data", ""),
-                    arguments.get("length_constraint", "200-300字"),
-                    arguments.get("format", "paragraph"),
-                    **arguments.get("kwargs", {})
-                )
-            elif tool_name == "content_writer_mcp":
-                result = content_writer_mcp(
-                    arguments.get("section_title", ""),
-                    arguments.get("content_data", []),
-                    arguments.get("overall_report_context", ""),
-                    **arguments.get("kwargs", {})
-                )
-            elif tool_name == "orchestrator_mcp_simple":
-                result = orchestrator_mcp_simple(
-                    arguments.get("task", ""),
-                    **arguments.get("kwargs", {})
-                )
-            elif tool_name == "orchestrator_mcp":
-                result = orchestrator_mcp(
-                    arguments.get("task", ""),
-                    arguments.get("task_type", "auto"),
-                    **arguments.get("kwargs", {})
-                )
-            elif tool_name == "user_interaction_mcp":
-                result = user_interaction_mcp(
-                    arguments.get("interaction_type", "confirmation"),
-                    arguments.get("prompt", ""),
-                    arguments.get("options", []),
-                    **arguments.get("kwargs", {})
-                )
-            else:
-                raise HTTPException(status_code=404, detail=f"Tool '{tool_name}' not found")
+            try:
+                if tool_name == "generate_insight_report":
+                    result = generate_insight_report(arguments.get("request", {}))
+                elif tool_name == "generate_academic_research_report":
+                    result = generate_academic_research_report(arguments.get("request", {}))
+                elif tool_name == "comprehensive_search":
+                    result = comprehensive_search(
+                        arguments.get("topic", ""),
+                        arguments.get("search_type", "comprehensive"),
+                        arguments.get("max_results", 10),
+                        arguments.get("days", 30),
+                        arguments.get("sources", ["web", "academic", "news"])
+                    )
+                elif tool_name == "search":
+                    result = search(
+                        arguments.get("query", ""),
+                        arguments.get("max_results", 5)
+                    )
+                elif tool_name == "parallel_search":
+                    result = parallel_search(
+                        arguments.get("queries", []),
+                        arguments.get("max_results", 3)
+                    )
+                elif tool_name == "generate_industry_dynamic_report":
+                    # 使用流式orchestrator而不是直接调用工具函数
+                    from streaming_orchestrator import StreamingOrchestrator
+                    orchestrator = StreamingOrchestrator()
+                    
+                    # 构建请求参数
+                    request_params = {
+                        "industry": arguments.get("industry", ""),
+                        "time_range": arguments.get("time_range", "recent"),
+                        "focus_areas": arguments.get("focus_areas", ["市场趋势", "技术创新", "政策影响", "竞争格局"]),
+                        "days": arguments.get("days", 30),
+                        "use_local_data": arguments.get("use_local_data", False)
+                    }
+                    
+                    # 使用流式方法生成报告
+                    try:
+                        async for message in orchestrator.stream_industry_dynamic_report(request_params):
+                            yield message
+                    except (GeneratorExit, asyncio.CancelledError, BrokenPipeError, ConnectionResetError) as e:
+                        print(f"🔌 [SSE] 连接在流式生成过程中关闭/取消: {e} (id={request_id}, tool={tool_name})")
+                    except Exception as e:
+                        print(f"❌ 流式报告生成异常: {e}")
+                        yield f"data: {json.dumps({'jsonrpc': '2.0', 'id': request_id, 'error': {'code': -32000, 'message': 'Tool execution failed', 'data': {'type': 'unknown', 'message': str(e)}}}, ensure_ascii=False)}\n\n"
+                    
+                    # 流式处理完成，直接结束
+                    return
+                elif tool_name == "analysis_mcp":
+                    result = analysis_mcp(
+                        arguments.get("analysis_type", "quality"),
+                        arguments.get("data", []),
+                        arguments.get("topic", ""),
+                        **arguments.get("kwargs", {})
+                    )
+                elif tool_name == "query_generation_mcp":
+                    result = query_generation_mcp(
+                        arguments.get("topic", ""),
+                        arguments.get("strategy", "initial"),
+                        arguments.get("context", ""),
+                        **arguments.get("kwargs", {})
+                    )
+                elif tool_name == "outline_writer_mcp":
+                    result = outline_writer_mcp(
+                        arguments.get("topic", ""),
+                        arguments.get("report_type", "comprehensive"),
+                        arguments.get("user_requirements", ""),
+                        **arguments.get("kwargs", {})
+                    )
+                elif tool_name == "summary_writer_mcp":
+                    result = summary_writer_mcp(
+                        arguments.get("content_data", ""),
+                        arguments.get("length_constraint", "200-300字"),
+                        arguments.get("format", "paragraph"),
+                        **arguments.get("kwargs", {})
+                    )
+                elif tool_name == "content_writer_mcp":
+                    result = content_writer_mcp(
+                        arguments.get("section_title", ""),
+                        arguments.get("content_data", []),
+                        arguments.get("overall_report_context", ""),
+                        **arguments.get("kwargs", {})
+                    )
+                elif tool_name == "orchestrator_mcp_simple":
+                    result = orchestrator_mcp_simple(
+                        arguments.get("task", ""),
+                        **arguments.get("kwargs", {})
+                    )
+                elif tool_name == "orchestrator_mcp":
+                    result = orchestrator_mcp(
+                        arguments.get("task", ""),
+                        arguments.get("task_type", "auto"),
+                        **arguments.get("kwargs", {})
+                    )
+                elif tool_name == "user_interaction_mcp":
+                    result = user_interaction_mcp(
+                        arguments.get("interaction_type", "confirmation"),
+                        arguments.get("prompt", ""),
+                        arguments.get("options", []),
+                        **arguments.get("kwargs", {})
+                    )
+                else:
+                    raise HTTPException(status_code=404, detail=f"Tool '{tool_name}' not found")
+            except Exception as e:
+                print(f"❌ 工具执行异常: {str(e)}")
+                error_message = {
+                    "jsonrpc": "2.0",
+                    "id": request_id,
+                    "error": {
+                        "code": -32000,
+                        "message": "Tool execution failed",
+                        "data": {
+                            "tool": tool_name,
+                            "error": str(e)
+                        }
+                    }
+                }
+                try:
+                    yield f"data: {json.dumps(error_message, ensure_ascii=False)}\n\n"
+                except (GeneratorExit, asyncio.CancelledError, BrokenPipeError, ConnectionResetError) as e2:
+                    print(f"🔌 [SSE] 连接在发送错误消息时关闭/取消: {e2} (id={request_id}, tool={tool_name})")
+                return
+
+            # 发送最终结果消息（JSON-RPC风格，保持与StreamingOrchestrator一致）
+            final_message = {
+                "jsonrpc": "2.0",
+                "id": request_id,
+                "result": {
+                    "content": result,
+                    "tool": tool_name
+                }
+            }
+            try:
+                yield f"data: {json.dumps(final_message, ensure_ascii=False)}\n\n"
+            except (GeneratorExit, asyncio.CancelledError, BrokenPipeError, ConnectionResetError) as e:
+                print(f"🔌 [SSE] 连接在发送最终结果时关闭/取消: {e} (id={request_id}, tool={tool_name})")
+                return
         
         
         return StreamingResponse(
             generate_sse_response(),
-            media_type="text/plain",
+            media_type="text/event-stream",
             headers={
                 "Cache-Control": "no-cache",
-                "Connection": "keep-alive",
-                "Content-Type": "text/event-stream"
+                "Connection": "keep-alive"
             }
         )
         
