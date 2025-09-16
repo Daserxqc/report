@@ -1,4 +1,3 @@
-
 from mcp.server.fastmcp import FastMCP
 import sys
 import os
@@ -126,7 +125,7 @@ def search(query: str, max_results: int = 5) -> str:
                     "relevance_score": result.get("relevance_score", 0.0),
                     "timestamp": result.get("timestamp", "")
                 }
-                processed_results.append(processed_result)
+            processed_results.append(processed_result)
         
         response = {
             "status": "success",
@@ -519,25 +518,59 @@ def _analyze_evaluation(content: str, topic: str, quality_standards: Dict = None
         }, ensure_ascii=False)
 
 def _evaluate_completeness(content: str, topic: str) -> float:
-    """评估内容完整性"""
+    """评估内容完整性 - 使用LLM评估"""
     if not content.strip():
         return 0.0
     
-    # 基于内容长度和主题覆盖度的简单评估
+    try:
+        # 调用LLM进行完整性评估
+        prompt = f"""请评估以下关于"{topic}"的资料完整性。
+
+评估标准：
+- 内容是否覆盖了主题的主要方面
+- 信息是否充分详细  
+- 是否缺少关键信息
+- 资料数量是否足够
+
+资料内容：
+{content[:2000]}
+
+请给出1-10分的评分（一位小数）。
+格式：X.X分
+
+评分："""
+        
+        response = llm_processor.call_llm_api(
+            prompt=prompt,
+            system_message="你是一个专业的内容质量评估专家，请客观公正地评估内容质量。",
+            temperature=0.1,
+            max_tokens=50
+        )
+        
+        # 从响应中提取数字评分
+        import re
+        score_match = re.search(r'(\d+(?:\.\d+)?)', response)
+        if score_match:
+            score = float(score_match.group(1))
+            return min(max(score, 0.0), 10.0)
+        else:
+            # 如果无法解析LLM响应，使用简单规则作为后备
+            return _simple_completeness_evaluation(content, topic)
+            
+    except Exception as e:
+        print(f"⚠️ LLM完整性评估失败: {e}")
+        return _simple_completeness_evaluation(content, topic)
+
+def _simple_completeness_evaluation(content: str, topic: str) -> float:
+    """简单的完整性评估作为后备"""
     content_lower = content.lower()
     topic_keywords = topic.lower().split()
     
-    # 检查主题关键词覆盖
     keyword_coverage = sum(1 for keyword in topic_keywords if keyword in content_lower) / len(topic_keywords) if topic_keywords else 0
-    
-    # 检查内容长度适中性
-    length_score = min(len(content) / 1000, 1.0)  # 1000字符为满分基准
-    
-    # 检查结构完整性（是否有标题、段落等）
+    length_score = min(len(content) / 1000, 1.0)
     structure_indicators = ["##", "###", "1.", "2.", "3.", "•", "-"]
     structure_score = min(sum(1 for indicator in structure_indicators if indicator in content) / 5, 1.0)
     
-    # 综合评分
     completeness_score = (keyword_coverage * 0.4 + length_score * 0.3 + structure_score * 0.3) * 10
     return min(completeness_score, 10.0)
 
@@ -587,32 +620,69 @@ def _evaluate_depth(content: str, topic: str) -> float:
     return min(final_depth_score, 10.0)
 
 def _evaluate_relevance(content: str, topic: str) -> float:
-    """评估内容相关性"""
+    """评估内容相关性 - 使用LLM评估"""
     if not content.strip():
         return 0.0
     
+    try:
+        # 调用LLM进行相关性评估
+        prompt = f"""请评估以下资料与主题"{topic}"的相关性。
+
+评估标准：
+- 资料内容是否直接相关于主题
+- 是否包含主题的核心关键词和概念
+- 信息是否有助于深入理解主题
+- 是否存在无关或偏离主题的内容
+
+资料内容：
+{content[:2000]}
+
+请给出1-10分的评分（一位小数）。
+格式：X.X分
+
+评分："""
+        
+        response = llm_processor.call_llm_api(
+            prompt=prompt,
+            system_message="你是一个专业的内容质量评估专家，请客观公正地评估内容质量。",
+            temperature=0.1,
+            max_tokens=50
+        )
+        
+        # 从响应中提取数字评分
+        import re
+        score_match = re.search(r'(\d+(?:\.\d+)?)', response)
+        if score_match:
+            score = float(score_match.group(1))
+            return min(max(score, 0.0), 10.0)
+        else:
+            # 如果无法解析LLM响应，使用简单规则作为后备
+            return _simple_relevance_evaluation(content, topic)
+            
+    except Exception as e:
+        print(f"⚠️ LLM相关性评估失败: {e}")
+        return _simple_relevance_evaluation(content, topic)
+
+def _simple_relevance_evaluation(content: str, topic: str) -> float:
+    """简单的相关性评估作为后备"""
     content_lower = content.lower()
     topic_lower = topic.lower()
     
-    # 主题关键词匹配
     topic_keywords = topic_lower.split()
     keyword_matches = sum(1 for keyword in topic_keywords if keyword in content_lower)
     keyword_score = (keyword_matches / len(topic_keywords)) if topic_keywords else 0
     
     # 主题相关词汇检查
+    ai_score = 0
+    edu_score = 0
     if "人工智能" in topic_lower or "ai" in topic_lower:
         ai_related = ["算法", "机器学习", "深度学习", "神经网络", "模型", "智能"]
         ai_score = min(sum(1 for word in ai_related if word in content_lower) / 3, 1.0)
-    else:
-        ai_score = 0
     
     if "教育" in topic_lower:
         edu_related = ["学习", "教学", "学生", "教师", "课程", "培训", "知识"]
         edu_score = min(sum(1 for word in edu_related if word in content_lower) / 3, 1.0)
-    else:
-        edu_score = 0
     
-    # 综合相关性分数
     relevance_score = (keyword_score * 0.5 + (ai_score + edu_score) * 0.5) * 10
     return min(relevance_score, 10.0)
 
@@ -813,7 +883,7 @@ def _generate_queries_with_llm(topic: str, sections: list, outline_structure: di
         llm_response = llm_processor.call_llm_api(
             prompt=prompt,
             temperature=0.3,  # 较低温度保证一致性
-            max_tokens=2000
+            max_tokens=500
         )
         
         print(f"🔍 [调试] LLM响应长度: {len(llm_response)} 字符")
@@ -1114,7 +1184,7 @@ def outline_writer_mcp(topic: str, report_type: str = "comprehensive", user_requ
                     "发展趋势",
                     "总结建议"
                 ]
-            
+        
         # 为每个章节添加子章节
         detailed_sections = []
         for i, section in enumerate(sections):
@@ -1414,12 +1484,12 @@ def content_writer_mcp(section_title: str, content_data: List[Dict], overall_rep
             print(f"  ✅ 章节 '{section_title}' 完成")
             
             return json.dumps({
-                "status": "success",
-                "section_title": section_title,
+            "status": "success",
+            "section_title": section_title,
                 "content": generated_content,
                 "word_count": len(generated_content),
                 "reference_count": len(content_data) if content_data else 0,
-                "generation_timestamp": datetime.now().isoformat()
+            "generation_timestamp": datetime.now().isoformat()
             }, ensure_ascii=False, indent=2)
         else:
             print(f"⚠️ LLM生成失败，使用备选内容")
@@ -1630,8 +1700,22 @@ def orchestrator_mcp(task: str, task_type: str = "auto", **kwargs) -> str:
         
         print(f"✅ 搜索完成: 收集到{len(all_search_results)}条数据")
         
-        # 步骤5: 生成执行摘要
-        print("\n📝 [步骤5] 生成执行摘要...")
+        # 步骤5: 质量评估迭代循环
+        print("\n🔍 [步骤5] 质量评估迭代循环...")
+        
+        # 组装初步内容用于质量评估
+        preliminary_content = _assemble_content_for_quality_evaluation("", {}, topic)
+        
+        # 执行质量评估迭代
+        all_search_results = _quality_evaluation_iteration(
+            topic=topic,
+            initial_search_results=all_search_results,
+            max_iterations=max_iterations,
+            min_quality_score=min_quality_score
+        )
+        
+        # 步骤6: 生成执行摘要
+        print("\n📝 [步骤6] 生成执行摘要...")
         
         summary_result = summary_writer_mcp(
             content_data=all_search_results,
@@ -1645,8 +1729,8 @@ def orchestrator_mcp(task: str, task_type: str = "auto", **kwargs) -> str:
         executive_summary = summary_data.get('summary', summary_data.get('content', '执行摘要生成中...'))
         print(f"✅ 执行摘要生成完成: {len(executive_summary)}字符")
         
-        # 步骤6: 生成各章节内容
-        print("\n📖 [步骤6] 生成各章节内容...")
+        # 步骤7: 生成各章节内容
+        print("\n📖 [步骤7] 生成各章节内容...")
         
         section_contents = {}
         for section_title in sections:
@@ -2097,6 +2181,267 @@ def _identify_sections_to_improve(weak_areas: List[str], section_titles: List[st
         # 出错时改进所有章节
         return list(section_titles)
 
+def _quality_evaluation_iteration(topic: str, initial_search_results: List[Dict], 
+                                max_iterations: int = 3, min_quality_score: float = 7.0) -> List[Dict]:
+    """质量评估迭代循环：评估数据质量，补充搜索，再评估"""
+    try:
+        print(f"🔍 [质量评估] 开始质量评估迭代，最大迭代次数: {max_iterations}")
+        
+        current_search_results = initial_search_results.copy()
+        iteration = 0
+        
+        while iteration < max_iterations:
+            iteration += 1
+            print(f"\n🔍 [质量评估] 第{iteration}轮评估...")
+            print(f"📊 [调试] 当前总搜索结果: {len(current_search_results)}条")
+            
+            # 组装当前搜索结果用于评估 - 每次迭代评估不同的内容切片
+            search_content = ""
+            
+            # 修复：每轮都评估所有搜索结果，确保评估的是整体质量
+            eval_results = current_search_results
+            eval_desc = f"全部搜索结果（第{iteration}轮迭代后）"
+            
+            print(f"📊 [调试] 第{iteration}轮评估范围: {eval_desc} ({len(eval_results)}条)")
+            
+            # 为避免内容过长，合理采样评估内容
+            sample_size = min(30, len(eval_results))  # 最多评估30条
+            if len(eval_results) > sample_size:
+                # 均匀采样
+                step = len(eval_results) // sample_size
+                sampled_results = eval_results[::step][:sample_size]
+            else:
+                sampled_results = eval_results
+            
+            for i, item in enumerate(sampled_results):
+                content = item.get('content', '')[:300]  # 每条300字符
+                title = item.get('title', '')
+                search_content += f"资料{i+1}: {title}\n内容: {content}\n\n"
+            
+            # 构建完整的评估内容
+            full_content = f"""主题: {topic}
+            
+当前收集的资料总数: {len(current_search_results)}条
+第{iteration}轮评估: 采样评估{len(sampled_results)}条代表性资料
+
+{search_content}
+
+请对以上资料的质量进行5个维度的评估：完整性、准确性、深度、相关性、清晰度。"""
+            
+            # 调用analysis_mcp进行质量评估
+            evaluation_result = analysis_mcp(
+                analysis_type="evaluation",
+                data=full_content,
+                topic=topic,
+                context=f"第{iteration}轮质量评估",
+                quality_standards={
+                    "completeness": {"weight": 0.3, "min_score": 7.0},
+                    "accuracy": {"weight": 0.25, "min_score": 8.0},
+                    "depth": {"weight": 0.2, "min_score": 6.0},
+                    "relevance": {"weight": 0.15, "min_score": 7.0},
+                    "clarity": {"weight": 0.1, "min_score": 6.0}
+                }
+            )
+            
+            evaluation_data = json.loads(evaluation_result)
+            
+            if evaluation_data.get('status') != 'success':
+                print(f"❌ 第{iteration}轮评估失败，跳出迭代")
+                break
+            
+            evaluation = evaluation_data.get('evaluation', {})
+            total_score = evaluation.get('total_score', 0)
+            weak_areas = evaluation.get('weak_areas', [])
+            needs_iteration = evaluation.get('needs_iteration', False)
+            
+            print(f"📊 [质量评估] 第{iteration}轮评分: {total_score}/10.0")
+            print(f"📊 [质量评估] 薄弱环节: {weak_areas}")
+            print(f"📊 [质量评估] 需要迭代: {needs_iteration}")
+            
+            # 如果质量达标或没有薄弱环节，停止迭代
+            if total_score >= min_quality_score and not needs_iteration:
+                print(f"✅ [质量评估] 质量达标 ({total_score} >= {min_quality_score})，停止迭代")
+                break
+            
+            # 如果是最后一轮评估，仍然执行补充搜索，然后退出
+            if iteration >= max_iterations:
+                print(f"🔍 [质量评估] 第{iteration}轮（最后一轮）评估完成，执行最后的补充搜索...")
+                # 继续执行补充搜索，然后在搜索完成后退出
+            else:
+                print(f"🔍 [质量评估] 第{iteration}轮评估完成，继续补充搜索...")
+            
+            # 根据薄弱环节生成补充查询
+            print(f"🔍 [质量评估] 生成补充查询以改进薄弱环节...")
+            supplementary_queries = _generate_quality_evaluation_queries(topic, weak_areas)
+            
+            if not supplementary_queries:
+                print(f"⚠️ [质量评估] 无法生成补充查询，停止迭代")
+                break
+            
+            # 执行补充搜索 - 增加每次搜索的结果数量
+            print(f"📊 [质量评估] 执行{len(supplementary_queries)}个补充查询...")
+            supplementary_results = []
+            
+            for query in supplementary_queries:
+                try:
+                    # 增加每个查询的结果数量从3到5
+                    search_result = search(query=query, max_results=5)
+                    search_data = json.loads(search_result)
+                    
+                    if search_data.get('status') == 'success':
+                        results = search_data.get('results', [])
+                        supplementary_results.extend(results)
+                        print(f"✅ 补充搜索 '{query}': {len(results)}条结果")
+                    else:
+                        print(f"❌ 补充搜索 '{query}': {search_data.get('message', '失败')}")
+                except Exception as e:
+                    print(f"❌ 补充搜索异常 '{query}': {str(e)}")
+            
+            # 合并补充结果
+            if supplementary_results:
+                current_search_results.extend(supplementary_results)
+                print(f"✅ [质量评估] 第{iteration}轮补充了{len(supplementary_results)}条结果")
+            else:
+                print(f"⚠️ [质量评估] 第{iteration}轮未获得有效补充结果")
+            
+            # 如果是最后一轮，在补充搜索完成后退出
+            if iteration >= max_iterations:
+                print(f"⚠️ [质量评估] 达到最大迭代次数 ({max_iterations})，补充搜索完成，停止迭代")
+                break
+        
+        print(f"✅ [质量评估] 迭代完成，最终收集到{len(current_search_results)}条搜索结果")
+        return current_search_results
+        
+    except Exception as e:
+        print(f"❌ [质量评估] 迭代过程异常: {str(e)}")
+        return initial_search_results
+
+def _assemble_content_for_quality_evaluation(executive_summary: str, section_contents: Dict[str, str], topic: str) -> str:
+    """组装内容用于质量评估"""
+    try:
+        # 构建完整的报告内容文本
+        content_parts = []
+        
+        # 添加主题和摘要
+        content_parts.append(f"主题: {topic}")
+        
+        if executive_summary:
+            content_parts.append(f"执行摘要: {executive_summary}")
+        
+        # 添加各章节内容
+        for section_title, content in section_contents.items():
+            if content:
+                content_parts.append(f"章节: {section_title}")
+                content_parts.append(content)
+        
+        return "\n\n".join(content_parts)
+    except Exception as e:
+        print(f"⚠️ 组装评估内容失败: {e}")
+        return f"主题: {topic}\n内容组装失败"
+
+def _generate_quality_evaluation_queries(topic: str, weak_areas: List[str]) -> List[str]:
+    """使用LLM根据薄弱环节生成更有针对性的补充搜索查询"""
+    try:
+        # 构建LLM prompt来生成更好的查询
+        weak_areas_str = "、".join(weak_areas)
+        prompt = f"""针对主题"{topic}"，当前资料在以下方面存在不足：{weak_areas_str}
+
+请生成5-8个具体的搜索查询，用于补充这些薄弱环节。要求：
+1. 查询要具体、有针对性
+2. 避免过于宽泛的词汇
+3. 包含专业术语和关键概念
+4. 每个查询应该能获取到不同角度的信息
+
+请直接返回查询列表，每行一个查询："""
+
+        try:
+            response = llm_processor.call_llm_api(
+                prompt=prompt,
+                system_message="你是一个专业的信息检索专家，擅长设计精准的搜索查询。",
+                temperature=0.3,
+                max_tokens=300
+            )
+            
+            # 解析LLM生成的查询
+            queries = []
+            for line in response.strip().split('\n'):
+                line = line.strip()
+                if line and not line.startswith(('#', '-', '*', '•')):
+                    # 清理可能的序号
+                    import re
+                    clean_query = re.sub(r'^\d+[\.\)]\s*', '', line).strip()
+                    if clean_query and len(clean_query) > 3:
+                        queries.append(clean_query)
+            
+            # 限制查询数量并去重
+            unique_queries = list(dict.fromkeys(queries))[:6]
+            
+            if len(unique_queries) >= 3:
+                print(f"🔍 [质量评估] LLM生成{len(unique_queries)}个补充查询: {unique_queries}")
+                return unique_queries
+            else:
+                print(f"⚠️ [质量评估] LLM生成的查询数量不足，使用后备方案")
+                return _generate_fallback_queries(topic, weak_areas)
+                
+        except Exception as e:
+            print(f"⚠️ [质量评估] LLM查询生成失败: {e}，使用后备方案")
+            return _generate_fallback_queries(topic, weak_areas)
+        
+    except Exception as e:
+        print(f"⚠️ 生成质量评估查询失败: {e}")
+        return [f"{topic} 补充资料"]
+
+def _generate_fallback_queries(topic: str, weak_areas: List[str]) -> List[str]:
+    """后备查询生成方案"""
+    queries = []
+    
+    # 薄弱环节对应的查询策略 - 更具体化
+    weakness_query_map = {
+        "completeness": [
+            f"{topic} 技术原理详解",
+            f"{topic} 应用案例分析",
+            f"{topic} 发展历程梳理"
+        ],
+        "accuracy": [
+            f"{topic} 权威研究报告",
+            f"{topic} 官方技术文档",
+            f"{topic} 学术论文综述"
+        ],
+        "depth": [
+            f"{topic} 底层技术机制",
+            f"{topic} 核心算法原理",
+            f"{topic} 技术架构设计"
+        ],
+        "relevance": [
+            f"{topic} 实际应用场景",
+            f"{topic} 行业解决方案",
+            f"{topic} 商业价值分析"
+        ],
+        "clarity": [
+            f"{topic} 通俗易懂解释",
+            f"{topic} 图解教程",
+            f"{topic} 入门指南"
+        ]
+    }
+    
+    # 为每个薄弱环节生成2个查询
+    for weak_area in weak_areas:
+        if weak_area in weakness_query_map:
+            queries.extend(weakness_query_map[weak_area][:2])
+    
+    # 如果没有薄弱环节，生成通用查询
+    if not queries:
+        queries = [
+            f"{topic} 最新技术进展",
+            f"{topic} 实际应用案例",
+            f"{topic} 技术挑战分析",
+            f"{topic} 未来发展趋势"
+        ]
+    
+    unique_queries = list(dict.fromkeys(queries))[:6]
+    print(f"🔍 [质量评估] 后备方案生成{len(unique_queries)}个补充查询: {unique_queries}")
+    return unique_queries
+
 # 流式处理器初始化
 try:
     from streaming_orchestrator import StreamingOrchestrator
@@ -2215,7 +2560,7 @@ async def tools_call(request: dict):
                         }
                     }
                     yield f"data: {json.dumps(result_msg, ensure_ascii=False)}\n\n"
-                
+                        
                 except Exception as e:
                     error_msg = {
                         "jsonrpc": "2.0",

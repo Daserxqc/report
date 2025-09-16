@@ -44,7 +44,7 @@ class LLMProcessor:
             
         # print(f"LLM处理器已初始化，使用的模型: {self.model}, API URL: {self.base_url}")  # MCP需要静默
         
-    @retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, min=2, max=10))
+    @retry(stop=stop_after_attempt(5), wait=wait_exponential(multiplier=2, min=4, max=20))
     def call_llm_api(self, prompt: str, system_message: Optional[str] = None, 
                   temperature: float = 0.3, max_tokens: int = 8192) -> str:
         """
@@ -81,7 +81,12 @@ class LLMProcessor:
             try:
                 from openai import OpenAI
                 
-                client = OpenAI(api_key=self.api_key, base_url=self.base_url)
+                client = OpenAI(
+                    api_key=self.api_key, 
+                    base_url=self.base_url,
+                    timeout=60.0,  # 设置60秒超时
+                    max_retries=3  # 内置重试3次
+                )
                 response = client.chat.completions.create(
                     model=self.model,
                     messages=messages,
@@ -496,7 +501,7 @@ class LLMProcessor:
                 print(f"JSON错误: {str(e)}")
                 raise ValueError(f"无法解析为有效的JSON: {e}")
     
-    @retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, min=2, max=10))
+    @retry(stop=stop_after_attempt(5), wait=wait_exponential(multiplier=2, min=4, max=20))
     def call_llm_api_json(self, prompt: str, system_message: Optional[str] = None, 
                        temperature: float = 0.2, max_tokens: int = 8192) -> dict:
         """

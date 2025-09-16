@@ -75,8 +75,34 @@ class MCPToolCallTester:
         if self.session:
             await self.session.close()
     
-    def create_insight_report_request(self, topic: str) -> Dict[str, Any]:
+    def create_insight_report_request(self, topic: str, depth_level: str = "intermediate", target_audience: str = "professional") -> Dict[str, Any]:
         """创建洞察报告生成请求 - 使用orchestrator_mcp"""
+        
+        # 映射中文到英文参数
+        depth_mapping = {
+            "basic": "basic",
+            "intermediate": "intermediate", 
+            "advanced": "advanced",
+            "详细": "detailed",
+            "基础": "basic",
+            "中等": "intermediate",
+            "高级": "advanced"
+        }
+        
+        audience_mapping = {
+            "general": "general",
+            "professional": "professional",
+            "academic": "academic", 
+            "business": "business",
+            "专业人士": "professional",
+            "学术": "academic",
+            "商业": "business",
+            "普通": "general"
+        }
+        
+        mapped_depth = depth_mapping.get(depth_level, depth_level)
+        mapped_audience = audience_mapping.get(target_audience, target_audience)
+        
         return {
             "jsonrpc": "2.0",
             "id": f"insight_{int(time.time())}",
@@ -87,8 +113,8 @@ class MCPToolCallTester:
                     "task": f"生成关于{topic}的深度洞察报告",
                     "task_type": "insights",
                     "topic": topic,
-                    "depth_level": "detailed",
-                    "target_audience": "专业人士"
+                    "depth_level": mapped_depth,
+                    "target_audience": mapped_audience
                 }
             }
         }
@@ -460,22 +486,26 @@ async def test_insight_only():
         return {"insight_report": []}
 
 
-async def test_custom_insight_report(topic: str = None):
+async def test_custom_insight_report(topic: str = None, depth_level: str = "intermediate", target_audience: str = "professional"):
     """测试自定义洞察报告题目
     
     Args:
         topic: 自定义主题，如果为None则使用默认值
+        depth_level: 深度等级 (basic/intermediate/advanced)
+        target_audience: 目标受众 (general/professional/academic/business)
     """
     if topic is None:
         topic = "人工智能在教育领域的应用前景"
     
     print(f"🚀 开始自定义洞察报告测试")
     print(f"📋 报告主题: {topic}")
+    print(f"📊 深度等级: {depth_level}")
+    print(f"👥 目标受众: {target_audience}")
     print("=" * 80)
     
     try:
         async with MCPToolCallTester() as tester:
-            request = tester.create_insight_report_request(topic)
+            request = tester.create_insight_report_request(topic, depth_level, target_audience)
             messages = await tester.send_tool_call_request(request)
             
             # 确保报告被保存
@@ -728,21 +758,59 @@ async def main():
 # 4. 只支持洞察报告类型
 
 if __name__ == "__main__":
-    # 只运行洞察报告测试
     import sys
     
     if len(sys.argv) > 1:
-        test_type = sys.argv[1]
-        if test_type == "insight":
+        if sys.argv[1] == "custom":
+            # 自定义洞察报告测试
+            if len(sys.argv) > 2:
+                topic = sys.argv[2]
+                print(f"[自定义] 测试自定义题目: {topic}")
+                asyncio.run(test_custom_insight_report(topic))
+            else:
+                # 交互式输入
+                print("[交互] 请输入自定义题目:")
+                topic = input("题目: ").strip()
+                if topic:
+                    print(f"[自定义] 测试题目: {topic}")
+                    asyncio.run(test_custom_insight_report(topic))
+                else:
+                    print("❌ 未输入题目，运行默认测试")
+                    asyncio.run(main())
+        elif sys.argv[1] == "insight":
             # 只测试洞察报告
             asyncio.run(test_insight_only())
-        elif test_type == "custom":
-            # 自定义洞察报告测试
-            topic = sys.argv[2] if len(sys.argv) > 2 else None
-            asyncio.run(test_custom_insight_report(topic))
+        elif sys.argv[1] == "interactive":
+            # 交互式模式
+            print("\n[交互模式] 自定义洞察报告生成")
+            print("=" * 50)
+            topic = input("请输入报告题目: ").strip()
+            if not topic:
+                print("❌ 未输入题目，退出")
+                sys.exit(1)
+            
+            # 可选参数
+            print("\n[可选参数] 以下参数可选 (直接回车使用默认值):")
+            depth_level = input("深度等级 (basic/intermediate/advanced) [intermediate]: ").strip() or "intermediate"
+            target_audience = input("目标受众 (general/professional/academic/business) [professional]: ").strip() or "professional"
+            
+            print(f"\n[配置] 报告配置:")
+            print(f"  题目: {topic}")
+            print(f"  深度等级: {depth_level}")
+            print(f"  目标受众: {target_audience}")
+            print(f"\n[开始] 开始生成报告...")
+            
+            async def run_interactive():
+                await test_custom_insight_report(topic, depth_level, target_audience)
+            
+            asyncio.run(run_interactive())
         else:
-            print("❌ 不支持的测试类型，运行默认洞察报告测试")
-            asyncio.run(main())
+            print("❌ 不支持的测试类型")
+            print("支持的参数:")
+            print("  python test_mcp_tool_call_format.py custom [题目]     # 自定义题目")
+            print("  python test_mcp_tool_call_format.py interactive       # 交互式模式") 
+            print("  python test_mcp_tool_call_format.py insight           # 默认洞察测试")
+            sys.exit(1)
     else:
-        # 运行洞察报告测试
+        # 运行默认洞察报告测试
         asyncio.run(main())
