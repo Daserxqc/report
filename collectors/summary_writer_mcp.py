@@ -1,7 +1,7 @@
 from typing import List, Dict, Optional, Union
 from dataclasses import dataclass
 from collectors.llm_processor import LLMProcessor
-from collectors.search_mcp import Document
+from collectors.search_mcp_old import Document
 
 
 @dataclass
@@ -512,4 +512,4 @@ class SummaryWriterMcp:
                 return summary_text[:300] + "..." if len(summary_text) > 300 else summary_text
                 
         except Exception as e:
-            return f"摘要生成失败: {str(e)}" 
+            return f"摘要生成失败: {str(e)}"

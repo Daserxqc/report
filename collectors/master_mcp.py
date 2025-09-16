@@ -6,7 +6,7 @@ import time
 from datetime import datetime
 
 # 导入所有MCP组件
-from collectors.search_mcp import SearchMcp, Document
+from collectors.search_mcp_old import SearchMcp, Document
 from collectors.query_generation_mcp import QueryGenerationMcp
 from collectors.analysis_mcp import AnalysisMcp, AnalysisResult
 from collectors.summary_writer_mcp import SummaryWriterMcp, SummaryConfig
@@ -823,4 +823,4 @@ class MasterMcp:
     
     def get_available_task_types(self) -> List[str]:
         """获取可用的任务类型"""
-        return [task_type.value for task_type in TaskType] 
+        return [task_type.value for task_type in TaskType]

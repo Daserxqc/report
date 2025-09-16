@@ -2,7 +2,7 @@ import json
 from typing import List, Dict, Optional, Union
 from dataclasses import dataclass
 from collectors.llm_processor import LLMProcessor
-from collectors.search_mcp import Document
+from collectors.search_mcp_old import Document
 
 
 @dataclass
@@ -680,4 +680,4 @@ class OutlineWriterMcp:
             )
             root.subsections.append(section)
         
-        return root 
+        return root

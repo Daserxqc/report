@@ -3,7 +3,7 @@ from typing import List, Dict, Optional, Union, Any
 from dataclasses import dataclass, asdict
 from pydantic import BaseModel
 from collectors.llm_processor import LLMProcessor
-from collectors.search_mcp import Document
+from collectors.search_mcp_old import Document
 
 
 @dataclass
@@ -685,4 +685,4 @@ class AnalysisMcp:
             score=coverage_score,
             details={"gaps": gaps, "data_count": data_count, "method": "simple_count_based"},
             reasoning=f"基于数据量的简单缺口分析，覆盖率: {coverage_score:.1f}"
-        ) 
+        )

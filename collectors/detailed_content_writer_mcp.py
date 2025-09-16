@@ -6,7 +6,7 @@ from collectors.llm_processor import LLMProcessor
 import sys
 import os
 sys.path.append(os.path.join(os.path.dirname(__file__), '..', 'search_mcp', 'src'))
-from collectors.search_mcp import Document
+from collectors.search_mcp_old import Document
 from collectors.outline_writer_mcp import OutlineNode
 
 

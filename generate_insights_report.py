@@ -198,4 +198,4 @@ if __name__ == "__main__":
     args = parser.parse_args()
     
     # 生成报告
-    generate_insights_report(args.topic, args.subtopics, args.output) 
+    generate_insights_report(args.topic, args.subtopics, args.output)

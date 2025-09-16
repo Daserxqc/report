@@ -445,43 +445,44 @@ def generate_market_forecast(llm_processor, topic, market_data, industry_news):
 def assemble_market_report(topic, market_overview, investment_analysis, tech_trends, 
                           competitive_landscape, market_forecast, market_data, 
                           company_analysis, industry_news):
-    """组装完整的市场报告"""
+    """组装完整的市场报告 - 专门针对市场研究的结构化报告"""
     
     current_date = datetime.now().strftime('%Y年%m月%d日')
     
+    # 市场研究报告专用结构
     report_content = f"""# {topic}市场研究报告
 
 **报告日期**: {current_date}  
-**数据来源**: 多个市场研究机构、公司财报、行业新闻  
-**报告类型**: 综合市场分析报告
+**报告类型**: 市场研究分析报告  
+**数据来源**: 多个市场研究机构、公司财报、行业新闻
 
 ---
 
-## 执行摘要
+## 核心发现
 
-本报告基于多个数据源对{topic}市场进行综合分析，涵盖市场现状、投资环境、技术趋势、竞争格局和未来展望。由于部分数据来自免费摘要信息，建议结合付费专业报告进行重要决策。
+本报告通过多维度数据分析，为{topic}市场提供全面的商业洞察和投资指导。
 
-## 1. 市场概览与现状
+### 市场规模与增长
 
 {market_overview}
 
-## 2. 投资环境与机会分析
+### 投资机会与风险评估
 
 {investment_analysis}
 
-## 3. 技术发展趋势
+### 技术创新驱动因素
 
 {tech_trends}
 
-## 4. 竞争格局分析
+### 市场竞争态势
 
 {competitive_landscape}
 
-## 5. 市场预测与展望
+### 未来发展预测
 
 {market_forecast}
 
-## 数据来源与方法论
+## 研究方法与数据说明
 
 ### 数据来源
 """
@@ -576,4 +577,4 @@ def main():
         sys.exit(1)
 
 if __name__ == "__main__":
-    main() 
+    main()
