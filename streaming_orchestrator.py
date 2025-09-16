@@ -103,18 +103,27 @@ class StreamingOrchestrator:
         self.tool_name = "orchestrator_mcp"
         
         try:
-            # 发送开始消息
-            yield self._create_progress_message("started", "开始生成洞察报告", "正在初始化洞察分析流程...")
-            await asyncio.sleep(0.1)
-            
             topic = kwargs.get("topic", "未指定主题")
-            task = kwargs.get("task", f"生成关于{topic}的洞察报告")
+            task = kwargs.get("task", f"生成关于{topic}的报告")
             task_type = kwargs.get("task_type", "insights")
             depth_level = kwargs.get("depth_level", "detailed")
             target_audience = kwargs.get("target_audience", "行业专家")
             
+            # 根据任务类型确定报告类型名称
+            report_type_names = {
+                "insights": "洞察报告",
+                "industry": "行业动态报告",
+                "academic": "学术研究报告",
+                "comprehensive": "综合报告"
+            }
+            report_name = report_type_names.get(task_type, "报告")
+            
+            # 发送开始消息
+            yield self._create_progress_message("started", f"开始生成{report_name}", f"正在初始化{report_name}分析流程...")
+            await asyncio.sleep(0.1)
+            
             # 发送进度更新
-            yield self._create_progress_message("processing", "分析主题需求", f"正在分析{topic}的洞察需求...")
+            yield self._create_progress_message("processing", "分析主题需求", f"正在分析{topic}的{task_type}需求...")
             await asyncio.sleep(0.1)
             
             # 直接生成完整报告（包括大纲）
@@ -122,7 +131,7 @@ class StreamingOrchestrator:
             await asyncio.sleep(0.1)
             
             # 生成完整报告内容（orchestrator_mcp会处理大纲生成）
-            yield self._create_progress_message("processing", "生成报告内容", "正在基于大纲生成详细的洞察内容...")
+            yield self._create_progress_message("processing", "生成报告内容", f"正在基于大纲生成详细的{report_name}内容...")
             await asyncio.sleep(0.1)
             
             # 清空上次用量，确保获取本次真实用量
@@ -132,8 +141,8 @@ class StreamingOrchestrator:
             # 直接调用orchestrator_mcp生成洞察报告
             result = await asyncio.to_thread(
                 orchestrator_mcp,
-                task=f"生成关于{topic}的深度洞察报告",
-                task_type="insights",
+                task=task,
+                task_type=task_type,
                 topic=topic,
                 depth_level=depth_level,
                 target_audience=target_audience
