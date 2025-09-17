@@ -80,7 +80,7 @@ except Exception as e:
 mcp = FastMCP("Search Server")
 
 @mcp.tool()
-def search(query: str, max_results: int = 5) -> str:
+def search(query: str, max_results: int = 5, search_type: str = "general") -> str:
     """执行搜索查询并返回结果"""
     try:
         if not search_available or not orchestrator:
@@ -90,14 +90,25 @@ def search(query: str, max_results: int = 5) -> str:
                 "results": []
             }, ensure_ascii=False)
         
-        print(f"🔍 执行搜索查询: {query}")
+        print(f"🔍 执行搜索查询: {query} (类型: {search_type})")
+        
+        # 根据搜索类型调整搜索配置
+        if search_type == "academic":
+            # 学术搜索：优先使用学术数据源，延长时间范围
+            sources = ["arxiv", "academic", "google", "tavily"]  # 优先使用arxiv和academic
+            days_back = 365  # 学术研究通常需要更长的时间范围
+            print(f"🎓 使用学术搜索配置: sources={sources}, days_back={days_back}")
+        else:
+            # 通用搜索：使用默认配置
+            sources = ["tavily", "brave", "google"]
+            days_back = 30
         
         # 使用搜索编排器执行搜索
         search_results = orchestrator.parallel_search(
             queries=[query],  # 传入查询列表
-            sources=["tavily", "brave", "google"],  # 使用主要搜索源
+            sources=sources,
             max_results_per_query=max_results,
-            days_back=30,
+            days_back=days_back,
             max_workers=3
         )
         
@@ -996,13 +1007,58 @@ def _generate_targeted_queries(topic: str, context: str, kwargs: Dict) -> str:
     }, ensure_ascii=False)
 
 def _generate_academic_queries(topic: str, context: str, kwargs: Dict) -> str:
-    """生成学术研究查询"""
+    """生成学术研究查询 - 参考generate_research_report的方法"""
+    try:
+        # 尝试使用LLM生成精确的学术搜索关键词
+        from collectors.llm_processor import LLMProcessor
+        llm_processor = LLMProcessor()
+        
+        prompt = f"""
+        为了搜索有关"{topic}"的最新学术研究信息，请生成8个精确的中英文搜索关键词或短语。
+        这些关键词应该是学术性的，能够用于找到高质量的研究论文和技术报告。
+        关键词应该涵盖该领域的：
+        1. 理论基础和核心概念
+        2. 最新研究方法和技术
+        3. 实验结果和应用案例
+        4. 综述和前沿进展
+        5. 未来发展方向
+        
+        请返回JSON格式，包含查询关键词和优先级：
+        {{"queries": [{{"query": "关键词", "priority": "high/medium/low", "type": "theoretical/methodological/experimental/review/recent"}}]}}
+        """
+        
+        try:
+            llm_response = llm_processor.call_llm_api(prompt, max_tokens=500)
+            # 尝试解析LLM返回的JSON
+            import re
+            json_match = re.search(r'\{.*\}', llm_response, re.DOTALL)
+            if json_match:
+                llm_queries = json.loads(json_match.group())
+                queries = llm_queries.get('queries', [])
+                if queries and len(queries) > 0:
+                    return json.dumps({
+                        "status": "success",
+                        "strategy": "academic",
+                        "topic": topic,
+                        "queries": queries,
+                        "total_queries": len(queries),
+                        "source": "llm_generated"
+                    }, ensure_ascii=False)
+        except Exception as e:
+            print(f"⚠️ LLM生成学术查询失败: {e}")
+    except Exception as e:
+        print(f"⚠️ 学术查询生成异常: {e}")
+    
+    # 回退到预定义的学术查询策略
     queries = [
         {"query": f"{topic} 理论基础", "priority": "high", "type": "theoretical"},
-        {"query": f"{topic} 研究方法", "priority": "medium", "type": "methodological"},
-        {"query": f"{topic} 实证研究", "priority": "high", "type": "empirical"},
-        {"query": f"{topic} 文献综述", "priority": "medium", "type": "literature"},
-        {"query": f"{topic} 研究前沿", "priority": "high", "type": "frontier"}
+        {"query": f"{topic} 研究方法", "priority": "high", "type": "methodological"},
+        {"query": f"{topic} 最新进展", "priority": "high", "type": "recent"},
+        {"query": f"{topic} 文献综述", "priority": "medium", "type": "review"},
+        {"query": f"{topic} 实证研究", "priority": "medium", "type": "empirical"},
+        {"query": f"{topic} 应用案例", "priority": "medium", "type": "application"},
+        {"query": f"{topic} 技术挑战", "priority": "low", "type": "challenges"},
+        {"query": f"{topic} 未来发展", "priority": "medium", "type": "future"}
     ]
     
     return json.dumps({
@@ -1010,7 +1066,8 @@ def _generate_academic_queries(topic: str, context: str, kwargs: Dict) -> str:
         "strategy": "academic",
         "topic": topic,
         "queries": queries,
-        "total_queries": len(queries)
+        "total_queries": len(queries),
+        "source": "predefined"
     }, ensure_ascii=False)
 
 def _generate_news_queries(topic: str, context: str, kwargs: Dict) -> str:
@@ -1065,15 +1122,29 @@ def outline_writer_mcp(topic: str, report_type: str = "comprehensive", user_requ
         elif report_type == "academic":
             prompt = f"""请为"{topic}"生成一个学术研究报告大纲。
 
-要求：
-1. 符合学术论文结构
-2. 包含研究背景、方法、分析、结论等
-3. 每个章节下包含详细子章节
-4. 体现学术严谨性
+这是一个研究综述报告，不是原创研究论文。参考以下简洁结构：
+1. 研究领域概述与主要方向 - 介绍研究领域现状和核心研究方向
+2. 关键技术与方法分析 - 分析主要技术路径和研究方法
+3. 发展趋势与未来展望 - 预测未来发展方向和挑战
+4. 重要研究成果分析 - 分析代表性研究成果和论文
+5. 结论与建议 - 总结并提出研究建议
+
+每个章节包含2-3个简洁的子章节，避免过于复杂的层级结构。
 
 用户需求：{user_requirements if user_requirements else '无特殊要求'}
 
-请按标准学术格式生成大纲："""
+请按以下格式生成简洁的学术研究报告大纲：
+# 一、研究领域概述与主要方向
+## 1.1 领域发展现状
+## 1.2 核心研究方向
+## 1.3 研究热点分析
+
+# 二、关键技术与方法分析
+## 2.1 主要技术路径
+## 2.2 研究方法论
+## 2.3 技术挑战
+
+请生成完整但简洁的学术研究报告大纲："""
 
         elif report_type == "industry":
             prompt = f"""请为"{topic}"生成一个行业分析报告大纲。
@@ -1164,14 +1235,11 @@ def outline_writer_mcp(topic: str, report_type: str = "comprehensive", user_requ
                 ]
             elif report_type == "academic":
                 sections = [
-                    "研究背景与意义",
-                    "文献综述",
-                    "理论框架",
-                    "研究方法",
-                    "数据分析",
-                    "结果讨论",
-                    "结论与建议",
-                    "参考文献"
+                    "研究领域概述与主要方向",
+                    "关键技术与方法分析", 
+                    "发展趋势与未来展望",
+                    "重要研究成果分析",
+                    "结论与建议"
                 ]
             elif report_type == "industry":
                 sections = [
@@ -1618,6 +1686,11 @@ def orchestrator_mcp(task: str, task_type: str = "auto", **kwargs) -> str:
         else:
             report_type = task_type
         print(f"🔍 [调试] 最终report_type: {report_type}")
+        
+        # 学术研究报告使用专门的处理流程
+        if report_type == "academic":
+            print("📚 [学术报告] 使用专门的学术研究报告生成流程...")
+            return _generate_academic_research_report(topic, task, depth_level, target_audience)
             
         outline_result = outline_writer_mcp(
             topic=topic,
@@ -1653,7 +1726,8 @@ def orchestrator_mcp(task: str, task_type: str = "auto", **kwargs) -> str:
                 if line.startswith('# ') and not line.startswith('## '):
                     # 主章节
                     section_title = line[2:].strip()  # 去掉"# "
-                    if section_title:
+                    # 过滤掉标题行和无效章节
+                    if section_title and not any(keyword in section_title.lower() for keyword in ['大纲', 'outline', '报告', 'report']):
                         sections.append(section_title)
                         current_main_section = section_title
                         outline_structure[section_title] = {
@@ -1678,16 +1752,22 @@ def orchestrator_mcp(task: str, task_type: str = "auto", **kwargs) -> str:
         # 步骤3: 生成查询策略
         print("\n🔍 [步骤3] 生成查询策略...")
         
+        # 根据报告类型选择查询策略
+        if report_type == "academic":
+            query_strategy = "academic"
+        else:
+            query_strategy = "outline_based"
+            
         query_result = query_generation_mcp(
             topic=topic,
-            strategy="outline_based",
+            strategy=query_strategy,
             context=json.dumps({
                 "intent": intent_data.get('details', {}),
                 "outline": sections,
                 "outline_structure": outline_structure
             }, ensure_ascii=False),
             report_type=report_type,
-            max_queries=len(sections) * 2  # 每个章节生成2个查询
+            max_queries=len(sections) * 2 if query_strategy == "outline_based" else 8
         )
         
         query_data = json.loads(query_result)
@@ -2013,6 +2093,356 @@ def _assemble_orchestrated_report(topic: str, task_description: str, intent_anal
     }
     
     return json.dumps(result, ensure_ascii=False, indent=2)
+
+def _generate_academic_research_report(topic: str, task: str, depth_level: str, target_audience: str) -> str:
+    """生成学术研究报告 - 参考generate_research_report的方法"""
+    try:
+        print(f"📚 [学术报告] 开始生成{topic}的学术研究报告")
+        
+        # 步骤1: 使用LLM生成学术搜索关键词
+        print("🔍 [步骤1] 生成学术搜索关键词...")
+        
+        from collectors.llm_processor import LLMProcessor
+        llm_processor = LLMProcessor()
+        
+        # 生成学术搜索关键词
+        keyword_prompt = f"""
+        为了搜索有关"{topic}"的学术研究信息，请生成12个精确的搜索关键词或短语。
+        既包含中文关键词也包含英文关键词，以提高搜索覆盖率和论文发现数量。
+        
+        关键词应该涵盖：
+        1. 基本概念和定义（中英文）
+        2. 核心技术方法和算法
+        3. 具体应用场景和案例
+        4. 最新研究进展和综述
+        5. 相关技术和交叉领域
+        6. 具体的技术术语和专业名词
+        
+        格式示例：
+        {topic} 基础理论
+        {topic} architecture
+        {topic} reinforcement learning
+        multi-agent systems
+        {topic} 应用研究
+        {topic} latest research 2024
+        {topic} deep learning
+        {topic} natural language processing
+        智能代理技术
+        autonomous agents
+        {topic} survey
+        {topic} 综述
+        
+        请生成12个不同角度的搜索关键词，每行一个：
+        """
+        
+        try:
+            search_keywords_response = llm_processor.call_llm_api(keyword_prompt, max_tokens=500)
+            # 处理返回的关键词，移除数字前缀和额外空白
+            import re
+            search_keywords_response = re.sub(r'^\d+\.\s*', '', search_keywords_response, flags=re.MULTILINE)
+            search_keywords = [k.strip() for k in search_keywords_response.split('\n') if k.strip()]
+            
+            if len(search_keywords) < 3:  # 如果关键词太少，使用默认关键词
+                search_keywords = [
+                    f"{topic} 研究", f"{topic} 技术", f"{topic} 应用",
+                    f"{topic} latest research", f"{topic} review", f"{topic} advances",
+                    f"{topic} methods", f"{topic} applications", f"{topic} survey"
+                ]
+            
+            print(f"✅ 生成的学术搜索关键词: {search_keywords[:8]}")
+        except Exception as e:
+            print(f"⚠️ 关键词生成失败: {e}，使用默认关键词")
+            search_keywords = [
+                f"{topic} 研究", f"{topic} 技术", f"{topic} 应用",
+                f"{topic} latest research", f"{topic} review", f"{topic} advances",
+                f"{topic} methods", f"{topic} applications", f"{topic} survey"
+            ]
+        
+        # 步骤2: 执行学术搜索
+        print("🔍 [步骤2] 执行学术文献搜索...")
+        
+        all_search_results = []
+        
+        # 使用生成的关键词进行搜索
+        for i, keyword in enumerate(search_keywords[:10]):  # 增加到10个关键词
+            try:
+                print(f"🔍 执行搜索查询 ({i+1}/10): {keyword}")
+                
+                # 调用search工具
+                search_result = search(
+                    query=keyword,
+                    max_results=15,  # 大幅增加每个关键词的搜索结果到15条
+                    search_type="academic"  # 指定学术搜索
+                )
+                
+                search_data = json.loads(search_result)
+                if search_data.get('status') == 'success':
+                    results = search_data.get('results', [])
+                    all_search_results.extend(results)
+                    print(f"✅ 搜索完成，找到 {len(results)} 条结果")
+                else:
+                    print(f"⚠️ 搜索失败: {search_data.get('error', '未知错误')}")
+                    
+            except Exception as e:
+                print(f"⚠️ 搜索关键词'{keyword}'时出错: {e}")
+        
+        print(f"✅ 学术搜索完成，总共收集到 {len(all_search_results)} 条研究资料")
+        
+        # 步骤3: 分析和组织研究数据
+        print("📊 [步骤3] 分析和组织研究数据...")
+        
+        # 即使搜索结果有限，也要执行分步骤生成以确保包含"主要研究论文分析"章节
+        if not all_search_results:
+            print("⚠️ 搜索结果有限，但仍将执行分步骤生成以确保报告完整性")
+        
+        # 分步骤生成学术报告 - 专门为学术报告设计的调度流程
+        print("📝 [步骤3.1] 生成报告前半部分...")
+        
+        # 第一步：生成报告前半部分（概述 + 技术分析）
+        first_part_prompt = f"""
+        请生成{topic}学术研究报告的前半部分，包含以下两个章节：
+
+        # {topic}学术研究报告
+
+        ## 研究领域概述与主要方向
+        - 详细分析{topic}领域的发展历程和现状
+        - 识别当前主要研究方向和热点领域  
+        - 总结该领域面临的核心研究问题和挑战
+        - 分析国内外研究差距和发展水平
+        (字数要求：800-1000字)
+
+        ## 关键技术与方法分析  
+        - 深入分析{topic}领域的主要技术路径和核心算法
+        - 比较不同技术方法的优缺点和适用场景
+        - 识别技术发展的主要趋势和突破方向
+        - 分析技术实现的难点和解决方案
+        (字数要求：800-1000字)
+
+        请基于以下研究资料生成内容：
+        {json.dumps(all_search_results[:30], ensure_ascii=False, indent=2) if all_search_results else "搜索资料有限"}
+
+        要求：内容详实，逻辑清晰，使用专业术语，总字数控制在1600-2000字。
+        """
+        
+        try:
+            first_part = llm_processor.call_llm_api(
+                first_part_prompt, 
+                max_tokens=4000,
+                temperature=0.7
+            )
+            print(f"✅ 前半部分生成完成: {len(first_part)}字符")
+        except Exception as e:
+            print(f"❌ 前半部分生成失败: {e}")
+            first_part = f"# {topic}学术研究报告\n\n## 研究领域概述与主要方向\n\n{topic}领域发展迅速...\n\n## 关键技术与方法分析\n\n{topic}技术方法多样..."
+        
+        # 第二步：专门生成"主要研究论文分析"章节
+        print("📝 [步骤3.2] 专门生成主要研究论文分析章节...")
+        
+        # 确保有足够的搜索资料
+        if not all_search_results:
+            print("⚠️ 没有搜索资料，跳过论文分析章节")
+            paper_analysis = f"## 主要研究论文分析\n\n由于搜索资料有限，无法进行详细的论文分析。"
+        else:
+            # 选择最具代表性的论文（最多30篇）
+            selected_papers = all_search_results[:30]
+            print(f"📚 选择{len(selected_papers)}篇论文进行详细分析")
+            
+            paper_analysis_prompt = f"""
+            **【核心任务】**：为{topic}学术研究报告生成独立的"主要研究论文分析"章节
+
+            **【关键要求】**：
+            1. 必须从提供的{len(selected_papers)}篇论文中选择25-30篇最具代表性的论文
+            2. 每篇论文分析不少于200字，必须包含完整的作者信息、发表来源、详细内容分析
+            3. 按论文类型分类组织：基础理论类、技术应用类、综述前沿类
+            4. 必须基于实际提供的论文资料，不能编造任何信息
+            5. 总字数必须达到4000-5000字
+            6. 这是独立的章节，不要包含其他内容
+
+            **【论文资料】**：
+            {json.dumps(selected_papers, ensure_ascii=False, indent=2)}
+
+            **【必须严格按照以下格式生成，参考示例结构】**：
+
+            ## 主要研究论文分析
+
+            ### 基础理论与方法创新类论文（8-10篇论文的详细分析）
+
+            **论文1：[从资料中选择的论文标题]**
+            - **主要作者**：[从资料中提取的真实作者姓名，如果资料中没有则写"作者信息未提供"]
+            - **发表来源**：[从资料中提取的真实期刊/会议名称，如果只有arXiv则写"arXiv预印本"]
+            - **发布日期**：[从资料中提取的发表日期]
+            - **核心创新点**：[基于资料内容详细描述该论文的主要理论贡献和创新之处，不少于50字]
+            - **技术方法**：[基于资料内容描述具体的研究方法、算法设计、理论框架，不少于50字]
+            - **实验验证**：[基于资料内容描述主要实验设置、数据集、评估指标和结果，不少于50字]
+            - **学术价值**：[基于资料内容分析对{topic}领域理论发展的具体推动作用，不少于50字]
+
+            **论文2：[第二篇论文标题]**
+            [按同样格式详细分析，每篇论文分析不少于200字]
+
+            [继续分析其余6-8篇基础理论论文...]
+
+            ### 技术应用与实践类论文（10-12篇论文的详细分析）
+
+            **论文1：[应用类论文标题]**
+            - **主要作者**：[从资料中提取的真实作者姓名]
+            - **发表来源**：[从资料中提取的真实期刊/会议名称]
+            - **发布日期**：[从资料中提取的发表日期]
+            - **解决问题**：[基于资料内容描述论文要解决的具体技术问题和应用场景，不少于50字]
+            - **技术方案**：[基于资料内容描述详细的系统架构、算法实现、技术路线，不少于50字]
+            - **实验评估**：[基于资料内容描述性能测试、对比实验、评估结果和数据，不少于50字]
+            - **创新优势**：[基于资料内容分析与现有方法的具体对比和改进之处，不少于50字]
+            - **应用潜力**：[基于资料内容分析实际部署可能性和产业化前景，不少于50字]
+
+            [继续详细分析其余9-11篇应用实践论文...]
+
+            ### 综述与前沿探索类论文（7-8篇论文的详细分析）
+
+            **论文1：[综述类论文标题]**
+            - **主要作者**：[从资料中提取的真实作者姓名]
+            - **发表来源**：[从资料中提取的真实期刊/会议名称]
+            - **发布日期**：[从资料中提取的发表日期]
+            - **综述范围**：[基于资料内容描述论文覆盖的研究领域和时间范围，不少于50字]
+            - **分类体系**：[基于资料内容描述论文提出的技术分类或理论框架，不少于50字]
+            - **发展脉络**：[基于资料内容描述梳理的领域发展历程和关键节点，不少于50字]
+            - **研究热点**：[基于资料内容描述识别的当前研究热点和趋势，不少于50字]
+            - **未来方向**：[基于资料内容描述提出的未来研究方向和挑战，不少于50字]
+
+            [继续详细分析其余6-7篇综述前沿论文...]
+
+            ### 研究脉络和发展趋势分析
+            - **学术传承关系**：基于上述论文分析，梳理{topic}领域的学术发展脉络
+            - **关键研究机构**：识别在该领域有重要贡献的大学、研究所和团队
+            - **技术演进路径**：总结从早期研究到最新进展的技术发展轨迹
+            - **研究热点分布**：分析当前研究的热点领域和新兴方向
+            - **未来研究空白**：发现尚未充分探索的研究方向和技术挑战
+
+            **【重要提醒】：
+            1. 必须逐篇详细分析论文，每篇论文分析不少于200字
+            2. 必须基于提供的实际论文资料，不能编造任何信息
+            3. 如果资料中缺少作者信息，明确标注"作者信息未提供"
+            4. 如果资料中缺少期刊信息，明确标注"arXiv预印本"
+            5. 总字数必须达到4000-5000字
+            6. 这是整个报告的核心章节，请务必详细展开
+            7. 只生成这一个章节，不要包含其他内容
+            """
+            
+            try:
+                paper_analysis = llm_processor.call_llm_api(
+                    paper_analysis_prompt, 
+                    max_tokens=15000,  # 大幅增加tokens以支持详细的论文分析
+                    temperature=0.7
+                )
+                print(f"✅ 论文分析章节生成完成: {len(paper_analysis)}字符")
+                
+                # 验证生成的章节是否包含"主要研究论文分析"
+                if "主要研究论文分析" not in paper_analysis:
+                    print("⚠️ 生成的章节缺少'主要研究论文分析'标题，使用备用方案")
+                    paper_analysis = f"## 主要研究论文分析\n\n{paper_analysis}"
+                    
+            except Exception as e:
+                print(f"❌ 论文分析章节生成失败: {e}")
+                paper_analysis = f"## 主要研究论文分析\n\n基于收集的研究资料，以下是{topic}领域的主要论文分析...\n\n### 基础理论与方法创新类论文\n\n### 技术应用与实践类论文\n\n### 综述与前沿探索类论文"
+        
+        # 第三步：生成报告后半部分（趋势展望 + 结论）
+        print("📝 [步骤3.3] 生成报告后半部分...")
+        
+        second_part_prompt = f"""
+        请生成{topic}学术研究报告的后半部分，包含以下两个章节：
+
+        ## 发展趋势与未来展望
+        - 预测{topic}领域未来3-5年的发展方向
+        - 分析该领域面临的主要挑战和发展机遇
+        - 提出前沿研究问题和潜在突破点
+        - 探讨跨学科融合的可能性和发展前景
+        (字数要求：800-1000字)
+
+        ## 结论与建议
+        - 总结{topic}领域的主要研究发现和发展规律
+        - 对研究者提出具体的研究方向建议
+        - 对产业发展提出战略性指导意见
+        - 展望该领域的长远发展前景
+        (字数要求：600-800字)
+
+        请基于以下研究资料生成内容：
+        {json.dumps(all_search_results[:20], ensure_ascii=False, indent=2) if all_search_results else "搜索资料有限"}
+
+        要求：内容详实，逻辑清晰，使用专业术语，总字数控制在1400-1800字。
+        """
+        
+        try:
+            second_part = llm_processor.call_llm_api(
+                second_part_prompt, 
+                max_tokens=3000,
+                temperature=0.7
+            )
+            print(f"✅ 后半部分生成完成: {len(second_part)}字符")
+        except Exception as e:
+            print(f"❌ 后半部分生成失败: {e}")
+            second_part = f"## 发展趋势与未来展望\n\n{topic}领域未来发展...\n\n## 结论与建议\n\n基于以上分析..."
+        
+        # 第四步：组装完整报告
+        print("📝 [步骤3.4] 组装完整学术报告...")
+        
+        # 验证各个部分是否生成成功
+        print(f"🔍 [调试] 前半部分长度: {len(first_part)}字符")
+        print(f"🔍 [调试] 论文分析部分长度: {len(paper_analysis)}字符")
+        print(f"🔍 [调试] 后半部分长度: {len(second_part)}字符")
+        
+        # 组装完整报告
+        academic_report = f"{first_part}\n\n{paper_analysis}\n\n{second_part}"
+        
+        # 验证最终报告是否包含"主要研究论文分析"
+        if "主要研究论文分析" not in academic_report:
+            print("⚠️ 最终报告缺少'主要研究论文分析'章节，强制添加...")
+            # 如果缺少论文分析章节，强制添加一个
+            if not all_search_results:
+                paper_analysis_fallback = f"## 主要研究论文分析\n\n由于搜索资料有限，无法进行详细的论文分析。"
+            else:
+                # 基于搜索结果生成简单的论文分析
+                paper_analysis_fallback = f"## 主要研究论文分析\n\n基于收集的{len(all_search_results)}篇研究资料，以下是{topic}领域的主要论文分析：\n\n"
+                for i, paper in enumerate(all_search_results[:15]):  # 分析前15篇论文
+                    title = paper.get('title', '无标题')
+                    content = paper.get('content', paper.get('summary', ''))[:200]
+                    paper_analysis_fallback += f"### 论文{i+1}: {title}\n\n{content}...\n\n"
+            
+            academic_report = f"{first_part}\n\n{paper_analysis_fallback}\n\n{second_part}"
+            print("✅ 已强制添加'主要研究论文分析'章节")
+        # 添加参考资料部分
+        references_section = "\n\n## 参考资料\n\n"
+        for i, source in enumerate(all_search_results[:30]):  # 限制参考资料数量
+            title = source.get('title', '无标题')
+            url = source.get('url', '#')
+            source_name = source.get('source', '未知来源')
+            references_section += f"{i+1}. [{title}]({url}) - {source_name}\n"
+        
+        final_content = academic_report + references_section
+        
+        result = {
+            "status": "success",
+            "report_type": "academic", 
+            "topic": topic,
+            "content": final_content,
+            "sections_count": 5,
+            "sources_count": len(all_search_results),
+            "generated_at": datetime.now().isoformat()
+        }
+        
+        print(f"✅ 学术研究报告生成完成: {len(final_content)}字符，{len(all_search_results)}个参考资料")
+        
+        return json.dumps(result, ensure_ascii=False, indent=2)
+        
+    except Exception as e:
+        print(f"❌ 学术研究报告生成异常: {e}")
+        
+        error_result = {
+            "status": "error",
+            "report_type": "academic",
+            "topic": topic,
+            "error": str(e),
+            "timestamp": datetime.now().isoformat()
+        }
+        
+        return json.dumps(error_result, ensure_ascii=False, indent=2)
 
 # generate_insight_report 已删除 - 使用 orchestrator_mcp(task_type="insights") 替代
 

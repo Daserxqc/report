@@ -99,7 +99,7 @@ class StreamingOrchestrator:
     # 删除了无用的委托方法，直接使用 stream_insight_report 等核心方法
 
     async def stream_insight_report(self, **kwargs) -> AsyncGenerator[Dict[str, Any], None]:
-        """流式生成洞察报告"""
+        """流式生成报告 - 根据类型选择不同的处理流程"""
         self.tool_name = "orchestrator_mcp"
         
         try:
@@ -112,7 +112,7 @@ class StreamingOrchestrator:
             # 根据任务类型确定报告类型名称
             report_type_names = {
                 "insights": "洞察报告",
-                "industry": "行业动态报告",
+                "industry": "行业动态报告", 
                 "academic": "学术研究报告",
                 "comprehensive": "综合报告"
             }
@@ -122,23 +122,42 @@ class StreamingOrchestrator:
             yield self._create_progress_message("started", f"开始生成{report_name}", f"正在初始化{report_name}分析流程...")
             await asyncio.sleep(0.1)
             
-            # 发送进度更新
-            yield self._create_progress_message("processing", "分析主题需求", f"正在分析{topic}的{task_type}需求...")
-            await asyncio.sleep(0.1)
-            
-            # 直接生成完整报告（包括大纲）
-            yield self._create_progress_message("processing", "生成报告大纲", f"正在为{topic}生成详细的报告结构...")
-            await asyncio.sleep(0.1)
-            
-            # 生成完整报告内容（orchestrator_mcp会处理大纲生成）
-            yield self._create_progress_message("processing", "生成报告内容", f"正在基于大纲生成详细的{report_name}内容...")
-            await asyncio.sleep(0.1)
+            # 学术报告使用专门的处理流程，不走大纲生成
+            if task_type == "academic":
+                # 学术报告专门流程
+                yield self._create_progress_message("processing", "分析学术研究需求", f"正在分析{topic}的学术研究需求...")
+                await asyncio.sleep(0.1)
+                
+                yield self._create_progress_message("processing", "生成学术搜索关键词", f"正在为{topic}生成学术搜索关键词...")
+                await asyncio.sleep(0.1)
+                
+                yield self._create_progress_message("processing", "执行学术文献搜索", f"正在搜索{topic}相关的学术文献...")
+                await asyncio.sleep(0.1)
+                
+                yield self._create_progress_message("processing", "分析研究数据", f"正在分析和组织{topic}的研究数据...")
+                await asyncio.sleep(0.1)
+                
+                yield self._create_progress_message("processing", "论文分析与分类", f"正在对收集的25-30篇论文进行深入分析和分类...")
+                await asyncio.sleep(0.1)
+                
+                yield self._create_progress_message("processing", "生成学术研究报告", f"正在生成包含详细论文分析的{topic}学术研究报告...")
+                await asyncio.sleep(0.1)
+            else:
+                # 其他报告类型的常规流程
+                yield self._create_progress_message("processing", "分析主题需求", f"正在分析{topic}的{task_type}需求...")
+                await asyncio.sleep(0.1)
+                
+                yield self._create_progress_message("processing", "生成报告大纲", f"正在为{topic}生成详细的报告结构...")
+                await asyncio.sleep(0.1)
+                
+                yield self._create_progress_message("processing", "生成报告内容", f"正在基于大纲生成详细的{report_name}内容...")
+                await asyncio.sleep(0.1)
             
             # 清空上次用量，确保获取本次真实用量
             if hasattr(llm_processor, 'last_usage'):
                 llm_processor.last_usage = None
             
-            # 直接调用orchestrator_mcp生成洞察报告
+            # 调用orchestrator_mcp生成报告
             result = await asyncio.to_thread(
                 orchestrator_mcp,
                 task=task,
@@ -163,10 +182,23 @@ class StreamingOrchestrator:
                 yield self._create_model_usage_message(usage_data=usage_info)
                 await asyncio.sleep(0.1)
             
-            # 检查是否有报告内容 - 修复字段名匹配问题
-            if result_data and result_data.get('status') == 'success' and 'report' in result_data:
-                report_content = result_data['report']
-                yield self._create_progress_message("completed", "洞察报告生成完成", "成功生成深度洞察分析报告")
+            # 检查是否有报告内容 - 处理不同报告类型的字段名
+            report_content = None
+            if result_data and result_data.get('status') == 'success':
+                # 学术报告使用 'content' 字段
+                if task_type == "academic" and 'content' in result_data:
+                    report_content = result_data['content']
+                # 其他报告使用 'report' 字段
+                elif 'report' in result_data:
+                    report_content = result_data['report']
+                # 兜底处理
+                elif 'content' in result_data:
+                    report_content = result_data['content']
+            
+            if report_content:
+                completion_message = f"{report_name}生成完成"
+                completion_detail = f"成功生成{report_name}"
+                yield self._create_progress_message("completed", completion_message, completion_detail)
                 await asyncio.sleep(0.1)
                 
                 # 发送最终结果
@@ -187,8 +219,8 @@ class StreamingOrchestrator:
                 yield final_result
             else:
                 # 处理失败情况
-                error_msg = result_data.get('error', '报告生成失败，未知原因')
-                yield self._create_error_message(f"洞察报告生成失败: {error_msg}")
+                error_msg = result_data.get('error', f'{report_name}生成失败，未知原因')
+                yield self._create_error_message(f"{report_name}生成失败: {error_msg}")
                 
         except Exception as e:
             print(f"❌ 洞察报告生成过程中发生错误: {str(e)}")

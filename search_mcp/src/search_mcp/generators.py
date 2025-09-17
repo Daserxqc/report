@@ -113,7 +113,7 @@ class CollectorInitializationAgent(BaseSearchAgent):
         self.collectors = {}
         self.source_types = {
             'web': ['tavily', 'brave', 'google'],
-            'academic': ['arxiv', 'semantic_scholar', 'ieee', 'springer', 'core'],
+            'academic': ['arxiv', 'academic', 'semantic_scholar', 'ieee', 'springer', 'core'],
             'news': ['news_api', 'google_news', 'brave_news', 'rss']
         }
         self.initialize_all_collectors()
@@ -453,7 +453,7 @@ class ParallelSearchAgent(BaseSearchAgent):
         """
         source_types = {
             'web': ['tavily', 'brave', 'google'],
-            'academic': ['arxiv', 'semantic_scholar', 'ieee', 'springer', 'core'],
+            'academic': ['arxiv', 'academic', 'semantic_scholar', 'ieee', 'springer', 'core'],
             'news': ['news_api', 'google_news', 'brave_news', 'rss']
         }
         

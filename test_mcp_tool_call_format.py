@@ -488,6 +488,49 @@ async def test_custom_industry_report(industry: str):
         import traceback
         print(f"📄 详细错误: {traceback.format_exc()}")
 
+async def test_custom_academic_report(research_topic: str):
+    """测试自定义学术研究报告生成"""
+    print(f"🚀 开始自定义学术研究报告测试")
+    print(f"📚 研究主题: {research_topic}")
+    print(f"📊 报告类型: 学术研究报告")
+    print(f"👥 目标受众: 学术研究者")
+    print("=" * 80)
+    
+    try:
+        async with MCPToolCallTester() as tester:
+            request = tester.create_academic_research_request(research_topic)
+            messages = await tester.send_tool_call_request(request)
+            
+            # 确保报告被保存
+            if tester.report_sections:
+                await tester._save_complete_report()
+            
+            # 生成测试报告
+            print("\n" + "=" * 80)
+            print("📊 自定义学术研究报告测试结果")
+            print("=" * 80)
+            
+            print(f"🎯 报告主题: {research_topic}")
+            print(f"📝 报告类型: 学术研究报告")
+            print(f"📨 收到消息: {len(messages)} 条")
+            
+            # 统计消息类型
+            message_types = {}
+            for msg in messages:
+                if "method" in msg:
+                    method = msg["method"]
+                    message_types[method] = message_types.get(method, 0) + 1
+            
+            for method, count in message_types.items():
+                print(f"   📨 {method}: {count} 条")
+            
+            print("\n💾 报告保存说明: 生成的报告已自动保存到 reports/ 文件夹")
+            
+    except Exception as e:
+        print(f"❌ 测试失败: {str(e)}")
+        import traceback
+        print(f"📄 详细错误: {traceback.format_exc()}")
+
 
 async def test_insight_only():
     """只测试洞察报告生成"""
@@ -836,6 +879,22 @@ if __name__ == "__main__":
                 else:
                     print("❌ 未输入行业，运行默认测试")
                     asyncio.run(main())
+        elif sys.argv[1] == "academic":
+            # 学术研究报告测试
+            if len(sys.argv) > 2:
+                research_topic = sys.argv[2]
+                print(f"[学术研究] 测试研究主题: {research_topic}")
+                asyncio.run(test_custom_academic_report(research_topic))
+            else:
+                # 交互式输入
+                print("[交互] 请输入研究主题:")
+                research_topic = input("研究主题: ").strip()
+                if research_topic:
+                    print(f"[学术研究] 测试研究主题: {research_topic}")
+                    asyncio.run(test_custom_academic_report(research_topic))
+                else:
+                    print("❌ 未输入研究主题，运行默认测试")
+                    asyncio.run(main())
         elif sys.argv[1] == "insight":
             # 只测试洞察报告
             asyncio.run(test_insight_only())
@@ -868,6 +927,7 @@ if __name__ == "__main__":
             print("支持的参数:")
             print("  python test_mcp_tool_call_format.py custom [题目]     # 自定义洞察报告")
             print("  python test_mcp_tool_call_format.py industry [行业]   # 自定义行业动态报告")
+            print("  python test_mcp_tool_call_format.py academic [主题]   # 自定义学术研究报告")
             print("  python test_mcp_tool_call_format.py interactive       # 交互式模式") 
             print("  python test_mcp_tool_call_format.py insight           # 默认洞察测试")
             sys.exit(1)
