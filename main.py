@@ -1469,12 +1469,15 @@ def content_writer_mcp(section_title: str, content_data: List[Dict], overall_rep
         # 准备参考内容
         reference_content = ""
         if content_data:
-            for i, item in enumerate(content_data[:5]):  # 使用更多参考数据
+            for i, item in enumerate(content_data[:8]):  # 使用更多参考数据
                 content = item.get("content", "") or item.get("title", "")
                 url = item.get("url", "")
                 if content:
                     url = item.get('url', item.get('source', '未知来源'))
-                    reference_content += f"参考资料{i+1}:\n标题: {item.get('title', '无标题')}\n内容: {content[:500]}\n来源: {url}\n\n"
+                    reference_content += f"参考资料{i+1}:\n标题: {item.get('title', '无标题')}\n内容: {content[:800]}\n来源: {url}\n\n"
+        else:
+            # 如果没有参考数据，提供基础分析框架
+            reference_content = f"基于章节标题'{section_title}'进行专业分析，请结合行业背景和专业知识进行深入阐述。"
         
         # 构建章节结构
         section_structure = ""
@@ -1723,9 +1726,9 @@ def orchestrator_mcp(task: str, task_type: str = "auto", **kwargs) -> str:
             
             for line in lines:
                 line = line.strip()
-                if line.startswith('# ') and not line.startswith('## '):
-                    # 主章节
-                    section_title = line[2:].strip()  # 去掉"# "
+                if line.startswith('## ') and not line.startswith('### '):
+                    # 主章节（## 开头的）
+                    section_title = line[3:].strip()  # 去掉"## "
                     # 过滤掉标题行和无效章节
                     if section_title and not any(keyword in section_title.lower() for keyword in ['大纲', 'outline', '报告', 'report']):
                         sections.append(section_title)
@@ -1736,9 +1739,9 @@ def orchestrator_mcp(task: str, task_type: str = "auto", **kwargs) -> str:
                         }
                         print(f"🔍 [调试] ✅ 找到主章节: {section_title}")
                         
-                elif line.startswith('## ') and current_main_section:
+                elif line.startswith('### ') and current_main_section:
                     # 子章节
-                    subsection_title = line[3:].strip()  # 去掉"## "
+                    subsection_title = line[4:].strip()  # 去掉"### "
                     if subsection_title:
                         outline_structure[current_main_section]['subsections'].append(subsection_title)
                         print(f"🔍 [调试] ✅ 找到子章节: {subsection_title}")
@@ -1783,7 +1786,9 @@ def orchestrator_mcp(task: str, task_type: str = "auto", **kwargs) -> str:
             # 提取查询字符串
             query_text = query_obj.get('query', '') if isinstance(query_obj, dict) else str(query_obj)
             if query_text:
-                search_result = search(query=query_text, max_results=3)
+                # 根据报告类型调整搜索结果数量
+                max_results = 10 if report_type == "industry" else 5
+                search_result = search(query=query_text, max_results=max_results)
                 search_data = json.loads(search_result)
                 
                 if search_data.get('status') == 'success':
@@ -1856,17 +1861,22 @@ def orchestrator_mcp(task: str, task_type: str = "auto", **kwargs) -> str:
                         score += 2
                     elif '人工智能' in title_lower and ('人工智能' in content or 'ai' in content or 'artificial intelligence' in content):
                         score += 2
+                    elif '行业' in title_lower and ('行业' in content or 'industry' in content):
+                        score += 2
+                    elif '动态' in title_lower and ('动态' in content or 'trend' in content or 'news' in content):
+                        score += 2
                     
-                    if score > 0:
+                    # 降低匹配门槛，只要有轻微相关性就包含
+                    if score > 0 or len(relevant_data) < 3:
                         relevant_data.append((item, score))
                 
-                # 按相关性得分排序，选择前5个
+                # 按相关性得分排序，选择前8个（增加数量）
                 relevant_data.sort(key=lambda x: x[1], reverse=True)
-                relevant_data = [item[0] for item in relevant_data[:5]]
+                relevant_data = [item[0] for item in relevant_data[:8]]
                 
-                # 如果还是没有相关数据，使用所有搜索结果的前5条
+                # 如果还是没有相关数据，使用所有搜索结果的前8条
                 if not relevant_data:
-                    relevant_data = all_search_results[:5]
+                    relevant_data = all_search_results[:8]
                 
                 content_result = content_writer_mcp(
                     section_title=section_title,
